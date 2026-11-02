@@ -1,0 +1,49 @@
+name: Build Windows exe
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]          # a tag like v1.0 also publishes a Release
+  workflow_dispatch:       # "Run workflow" button
+
+jobs:
+  build:
+    runs-on: windows-latest
+    permissions:
+      contents: write      # needed to attach the exe to a Release
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install requirements
+        run: pip install -r requirements.txt
+
+      - name: Build exe
+        run: >
+          pyinstaller --noconsole --onefile --name PCPrint
+          --add-data "static;static"
+          --hidden-import pystray._win32
+          --hidden-import win32com.client
+          --collect-all webview
+          --collect-all pythonnet
+          --collect-all clr_loader
+          app.py
+
+      - name: Zip
+        shell: pwsh
+        run: Compress-Archive -Path dist\PCPrint.exe -DestinationPath dist\PCPrint.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PCPrint
+          path: dist/PCPrint.zip
+
+      - name: Publish Release (only for v* tags)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/PCPrint.zip
