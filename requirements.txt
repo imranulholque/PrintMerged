@@ -1,0 +1,8 @@
+flask
+pillow
+pymupdf==1.24.14
+qrcode
+pywin32
+pywebview
+pystray
+pyinstaller
