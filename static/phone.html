@@ -1,0 +1,464 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Phone Print</title>
+<style>
+:root{--bg:#f4f5f7;--card:#fff;--tx:#1b1f24;--mut:#6b7280;--pri:#2563eb;--bd:#e5e7eb}
+@media(prefers-color-scheme:dark){:root{--bg:#111418;--card:#1b2027;--tx:#e8eaed;--mut:#9aa3af;--bd:#2d343d}}
+*{box-sizing:border-box}[hidden]{display:none!important}
+body{margin:0;font:16px system-ui,sans-serif;background:var(--bg);color:var(--tx)}
+.wrap{max-width:640px;margin:0 auto;padding:14px}
+h1{font-size:20px;margin:6px 0 14px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:12px;margin-bottom:10px}
+button,select,input[type=number],.btn{font:inherit;border-radius:10px;border:1px solid var(--bd);background:var(--card);color:var(--tx);padding:10px 14px}
+button.p,.btn.p{background:var(--pri);color:#fff;border-color:var(--pri)}
+button.x{padding:8px 12px;color:#dc2626}
+select:disabled{opacity:.5}
+#pv{position:fixed;inset:0;background:var(--bg);z-index:10;overflow:auto}
+.pvstage{display:flex;gap:10px;justify-content:center;align-items:flex-start;margin:10px 0}
+.pvsheet{flex:1;min-width:0;max-width:420px;text-align:center}
+.pvsheet img{width:100%;display:block;border-radius:4px;box-shadow:0 2px 12px rgba(0,0,0,.35);background:#fff;min-height:120px}
+.lg{display:inline-block;width:12px;height:12px;vertical-align:-1px;margin-right:4px;border-radius:2px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.grow{flex:1;min-width:0}
+.name{font-weight:600;overflow-wrap:anywhere}
+.mut{color:var(--mut);font-size:14px}
+input[type=tel]{font:inherit;font-size:28px;letter-spacing:12px;text-align:center;width:100%;padding:10px;border-radius:10px;border:1px solid var(--bd);background:var(--card);color:var(--tx)}
+.btn{display:inline-block;cursor:pointer}
+#dlg{position:fixed;inset:0;background:var(--bg);overflow:auto;z-index:5}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px}
+.pg{display:flex;flex-direction:column;gap:4px;font-size:13px;background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:6px}
+.pg img{width:100%;border-radius:6px;background:#fff}
+.field{display:flex;flex-direction:column;gap:4px;margin-bottom:10px}
+.field select,.field input{width:100%}
+.sheet{text-align:center;margin:12px 0}
+.sheet img{width:100%;max-width:420px;box-shadow:0 2px 10px rgba(0,0,0,.3)}
+#rd{position:fixed;inset:0;background:var(--bg);z-index:11;overflow:auto}
+#rd img{width:100%;display:block;margin:10px 0;border-radius:4px;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.3);min-height:120px}
+button.s{padding:8px 12px}button:disabled{opacity:.45}
+.num{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:11px;background:var(--pri);color:#fff;font-size:12px;font-weight:700;margin-right:6px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>📄 Phone Print</h1>
+
+  <div id="login" class="card" hidden>
+    <p>Enter the 4-digit PIN shown on the PC</p>
+    <input id="pin" type="tel" inputmode="numeric" maxlength="4" autocomplete="off">
+    <p id="lerr" style="color:#dc2626"></p>
+    <button id="go" class="p" style="width:100%">Open</button>
+  </div>
+
+  <div id="main" hidden>
+    <div class="card">
+      <label class="btn p">Choose files (PDF / images)
+        <input id="pick" type="file" multiple accept=".pdf,image/*" hidden>
+      </label>
+      <p id="ustat" class="mut"></p>
+      <p class="mut">Files added on the PC show up here too, and the other way round.</p>
+    </div>
+    <div id="list"></div>
+    <div id="all" class="card" hidden>
+      <div class="name">Print all (merged)</div>
+      <p class="mut">All files in the order shown, as one print job.</p>
+      <div class="row" id="allbtns"></div>
+      <p><button id="clear" class="x">Remove all files</button></p>
+    </div>
+  </div>
+</div>
+
+<div id="dlg" hidden>
+  <div class="wrap">
+    <div class="row"><button id="close">← Back</button><div class="name grow" id="ptitle"></div></div>
+    <p class="mut">Select pages to print</p>
+    <div class="grid" id="pgrid"></div>
+    <div class="card" style="margin-top:14px">
+      <div class="field"><label>Printer</label><select id="printer"></select></div>
+      <div class="field"><label>Profile (saved driver settings)</label>
+        <select id="profile"><option value="">None (normal way)</option></select>
+        <div class="row">
+          <button id="bprof" class="grow">⚙ Printer Properties (save as profile)</button>
+          <button id="bdel" class="x" hidden>🗑 Delete</button>
+        </div>
+        <p class="mut" id="pnote"></p>
+      </div>
+      <div class="field"><label>Paper size</label><select id="paper"></select></div>
+      <div class="field"><label>Orientation</label>
+        <select id="orient">
+          <option value="auto">Auto (match the page)</option>
+          <option value="portrait">Portrait</option>
+          <option value="landscape">Landscape</option>
+        </select></div>
+      <div class="field"><label>Color</label><select id="color"></select></div>
+      <div class="field" id="duprow"><label>Two-sided</label>
+        <select id="duplex">
+          <option value="off">Off (one side)</option>
+          <option value="long">Long edge</option>
+          <option value="short">Short edge</option>
+        </select></div>
+      <div class="field"><label>Copies</label><input id="copies" type="number" min="1" max="99" value="1" inputmode="numeric"></div>
+      <div class="field"><label>Scaling</label><select id="scale"></select>
+        <div id="pctbox" class="row" hidden>
+          <button id="pctm" type="button">−</button>
+          <input id="pct" type="number" min="10" max="400" step="5" value="100" inputmode="numeric" style="width:90px">
+          <span>%</span>
+          <button id="pctp" type="button">+</button>
+        </div>
+        <input id="pctr" type="range" min="10" max="300" step="5" value="100" hidden>
+        <p class="mut" id="scnote"></p></div>
+      <div class="field"><label class="row"><input type="checkbox" id="nnon"> <span class="name">Add page numbers</span></label>
+        <div id="nnbox" hidden>
+          <div class="row"><select id="nnpos" class="grow"><option value="bottom">Bottom</option><option value="top">Top</option></select>
+            <select id="nnalign" class="grow"><option value="center">Center</option><option value="right">Right</option><option value="left">Left</option></select></div>
+          <div class="row" style="margin-top:8px"><input id="nnsize" type="number" min="6" max="72" value="12" class="grow" title="Font size (pt)">
+            <input id="nnstart" type="number" min="1" value="1" class="grow" title="Start at">
+            <input id="nnmargin" type="number" min="2" max="40" value="8" class="grow" title="Edge distance (mm)"></div>
+          <p class="mut">Font size (pt) · start at · edge distance (mm)</p>
+          <label class="row"><input type="checkbox" id="nnbold"> <b>Bold</b></label>
+        </div></div>
+      <p class="mut" id="dnote"></p>
+      <div class="row">
+        <button id="bprev" class="grow">👁 Preview</button>
+        <button id="bprint" class="grow p">🖨 Print</button>
+      </div>
+      <p id="pmsg"></p>
+    </div>
+  </div>
+</div>
+
+<div id="rd" hidden><div class="wrap"><div class="row"><button id="rdclose">✕ Close</button><div class="name grow" id="rdtitle"></div></div><div id="rdb"></div></div></div>
+
+<div id="pv" hidden>
+  <div class="wrap">
+    <div class="row"><button id="pvclose">✕ Close</button><div class="name grow" id="pvtitle">Print preview</div></div>
+    <div class="field" style="margin-top:12px"><label>Scaling</label><select id="pvscale"></select>
+      <div id="pvpct" class="row" hidden>
+        <button id="pvpm" type="button">−</button><span class="name" id="pvpv">100%</span><button id="pvpp" type="button">+</button>
+      </div>
+    </div>
+    <div class="pvstage" id="pvstage"></div>
+    <div class="row" style="justify-content:center">
+      <button id="pvprev">‹ Prev</button><span id="pvpos" class="name"></span><button id="pvnext">Next ›</button>
+    </div>
+    <p class="mut" style="text-align:center">
+      <span class="lg" style="background:#cdd0d6;border:1px solid #888"></span>printer cannot print here &nbsp;
+      <span class="lg" style="background:#fff;border:2px dashed #2563eb"></span>printable area
+    </p>
+    <p class="mut" id="pvinfo"></p>
+  </div>
+</div>
+
+<script>
+const $=s=>document.querySelector(s);
+let FILES=[],CAPS=null,CUR=null,REV=-1,SREV=-1,PRN={},prT=null;
+const NUM={on:false,pos:'bottom',align:'center',size:12,start:1,bold:false,margin:8};
+function el(t,props={},...kids){const e=document.createElement(t);Object.assign(e,props);kids.forEach(k=>e.append(k));return e}
+async function api(url,opt){const r=await fetch(url,opt);if(r.status===401){show('login');throw new Error('login')}return r}
+function show(v){$('#login').hidden=v!=='login';$('#main').hidden=v!=='main'}
+const JH={'Content-Type':'application/json'};
+
+$('#go').onclick=async()=>{
+  const r=await fetch('/api/login',{method:'POST',headers:JH,body:JSON.stringify({pin:$('#pin').value})});
+  const j=await r.json();
+  if(r.ok){$('#lerr').textContent='';init()}else $('#lerr').textContent=j.error;
+};
+async function init(){await loadSet();show('main');await loadFiles()}
+async function loadFiles(){const r=await api('/api/files');FILES=await r.json();render()}
+
+$('#pick').onchange=async e=>{
+  const fs=[...e.target.files];let i=0;
+  for(const f of fs){i++;await up(f,i,fs.length)}
+  e.target.value='';$('#ustat').textContent='';loadFiles();
+};
+function up(f,i,n){return new Promise(res=>{
+  const x=new XMLHttpRequest();x.open('POST','/api/upload');
+  x.upload.onprogress=ev=>{if(ev.lengthComputable)$('#ustat').textContent=`Uploading ${i}/${n}: ${f.name} ${Math.round(ev.loaded/ev.total*100)}%`};
+  x.onload=()=>{if(x.status!==200){try{alert(JSON.parse(x.responseText).error)}catch{}}res()};
+  x.onerror=()=>{alert('Upload failed: '+f.name);res()};
+  const fd=new FormData();fd.append('file',f);x.send(fd);
+})}
+
+function render(){
+  const L=$('#list');L.innerHTML='';
+  FILES.forEach((f,k)=>{
+    const meta=f.kind==='pdf'?`PDF · ${f.pages} page${f.pages>1?'s':''}`:'Image';
+    const b=el('button',{className:'p',textContent:'🖨 Print'});
+    b.onclick=()=>openPrint(f.name,Array.from({length:f.pages},(_,i)=>({f:f.id,p:i,land:f.lands[i],label:'Page '+(i+1)})));
+    const mv=(d,t,dis)=>{const x=el('button',{className:'s',textContent:t,disabled:dis});x.onclick=async()=>{await api('/api/move',{method:'POST',headers:JH,body:JSON.stringify({id:f.id,dir:d})});loadFiles()};return x};
+    const d=el('button',{className:'x',textContent:'✕'});
+    d.onclick=async()=>{await api('/api/files/'+f.id,{method:'DELETE'});loadFiles()};
+    const nm=el('div',{className:'name',textContent:f.name});nm.style.cursor='pointer';nm.title='Read';nm.onclick=()=>readFile(f);
+    nm.prepend(el('span',{className:'num',textContent:k+1}));
+    L.append(el('div',{className:'card'},el('div',{className:'row'},
+      el('div',{className:'grow'},nm,el('div',{className:'mut',textContent:meta})),
+      mv('up','↑',k===0),mv('down','↓',k===FILES.length-1),b,d)));
+  });
+  $('#all').hidden=!FILES.length;
+  const A=$('#allbtns');A.innerHTML='';
+  if(FILES.length){
+    const tot=FILES.reduce((a,f)=>a+f.pages,0);
+    const b=el('button',{className:'p',textContent:`🖨 Print all (${tot} page${tot>1?'s':''})`});
+    b.onclick=()=>{let n=0,pages=[];FILES.forEach(f=>{for(let i=0;i<f.pages;i++){n++;pages.push({f:f.id,p:i,land:f.lands[i],label:`${n}. ${f.name}${f.pages>1?' (p'+(i+1)+')':''}`})}});openPrint('All files',pages)};
+    A.append(b);
+  }
+}
+function readFile(f){
+  $('#rdtitle').textContent=f.name;const b=$('#rdb');b.innerHTML='';
+  for(let i=0;i<f.pages;i++)b.append(el('img',{loading:'lazy',alt:'',src:`/api/view?f=${f.id}&p=${i}&q=2${numQS()}&v=${REV}`}));
+  $('#rd').hidden=false;
+}
+$('#rdclose').onclick=()=>{$('#rd').hidden=true;$('#rdb').innerHTML=''};
+$('#clear').onclick=async()=>{if(confirm('Remove all files?')){await api('/api/files',{method:'DELETE'});loadFiles()}};
+
+function msg(t){$('#pmsg').textContent=t}
+function openPrint(title,pages){
+  CUR={title,pages};$('#ptitle').textContent=title;
+  const g=$('#pgrid');g.innerHTML='';
+  pages.forEach(p=>{
+    const lb=el('label',{className:'pg'},el('input',{type:'checkbox',checked:true}),
+      el('img',{loading:'lazy',src:`/api/thumb?f=${p.f}&p=${p.p}`}),el('span',{textContent:p.label}));
+    p.cb=lb.firstChild;g.append(lb);
+  });
+  msg('');
+  $('#dlg').hidden=false;loadPrinters();
+}
+$('#close').onclick=()=>{$('#dlg').hidden=true};
+
+async function loadPrinters(){
+  const s=$('#printer');s.innerHTML='';
+  const r=await api('/api/printers');const l=await r.json();
+  if(!Array.isArray(l)||!l.length){msg('No printer found on this PC.');return}
+  l.forEach(p=>s.append(new Option(`${p.name}  [${p.usb?'USB':p.port}]${p.default?' ★':''}`,p.name)));
+  if(PRN.printer&&[...s.options].some(o=>o.value===PRN.printer))s.value=PRN.printer;
+  s.onchange=loadCaps;loadCaps();
+}
+async function loadCaps(){
+  msg('Reading printer settings…');
+  const r=await api('/api/printer?name='+encodeURIComponent($('#printer').value));
+  CAPS=await r.json();
+  if(CAPS.error){msg('Error: '+CAPS.error);return}
+  msg('');
+  const P=$('#paper');P.innerHTML='';
+  CAPS.papers.forEach(p=>P.append(new Option(p.name+(p.custom?' (custom)':'')+(p.name===CAPS.defaults.paper?' – driver default':''),p.name)));
+  if(CAPS.defaults.paper)P.value=CAPS.defaults.paper;
+  const C=$('#color');C.innerHTML='';
+  if(CAPS.color){C.append(new Option('Color','color'));C.append(new Option('Black & White','mono'));C.value=CAPS.defaults.color?'color':'mono'}
+  else C.append(new Option('Black & White (printer has no color)','mono'));
+  $('#duprow').hidden=!CAPS.duplex;
+  if(CAPS.duplex)$('#duplex').value=CAPS.defaults.duplex;
+  applyPrn();
+  const dn={off:'one side',long:'two-sided long edge',short:'two-sided short edge'};
+  $('#dnote').textContent=`Driver default: ${CAPS.defaults.paper||'?'}, ${CAPS.defaults.color?'Color':'B&W'}${CAPS.duplex?', '+dn[CAPS.defaults.duplex]:''}`;
+  loadProfiles();
+}
+
+/* ---- profiles: driver's own settings window opens on the PC, like Word's Printer Properties ---- */
+async function loadProfiles(selId){
+  const S=$('#profile');S.innerHTML='';S.append(new Option('None (normal way)',''));
+  try{
+    const l=await (await api('/api/profiles?printer='+encodeURIComponent($('#printer').value))).json();
+    l.forEach(p=>S.append(new Option(p.name,p.id)));
+  }catch{}
+  S.value=selId||'';profChange();
+}
+function profChange(){
+  const has=!!$('#profile').value;
+  $('#bdel').hidden=!has;
+  $('#duplex').disabled=has;
+  $('#pnote').textContent=has
+    ?'This profile controls the driver options (two-sided, paper type, quality…). Paper size, orientation, color and copies still follow the settings below.'
+    :'Optional. With no profile, printing works the normal way.';
+}
+$('#profile').onchange=profChange;
+$('#bprof').onclick=async()=>{
+  if(!$('#printer').value)return;
+  const name=prompt('Name for this profile (e.g. Epson Glossy High, Toshiba 2-sided):');
+  if(!name||!name.trim())return;
+  msg('⚠ A settings window is opening on the PC. Choose the options there and press OK.');
+  try{
+    const r=await api('/api/profiles/new',{method:'POST',headers:JH,body:JSON.stringify({printer:$('#printer').value,name:name.trim()})});
+    const j=await r.json();
+    if(!r.ok){msg('Error: '+j.error);return}
+    pollProf(j.id);
+  }catch(e){msg('Error: '+e.message)}
+};
+async function pollProf(id){
+  const j=await (await api('/api/job/'+id)).json();
+  if(j.state==='run')setTimeout(()=>pollProf(id),800);
+  else if(j.state==='done'){msg('✓ Profile saved: '+j.profile.name);loadProfiles(j.profile.id)}
+  else if(j.state==='cancel')msg('Cancelled on the PC. Nothing was saved.');
+  else msg('Error: '+j.error);
+}
+$('#bdel').onclick=async()=>{
+  const v=$('#profile').value;
+  if(!v||!confirm('Delete this profile?'))return;
+  await api('/api/profiles/'+v+'?printer='+encodeURIComponent($('#printer').value),{method:'DELETE'});
+  loadProfiles();
+};
+
+const sel=()=>CUR.pages.filter(p=>p.cb.checked);
+function orient(){
+  const v=$('#orient').value;if(v!=='auto')return v;
+  const s=sel()[0];return s&&s.land?'landscape':'portrait';
+}
+function params(){
+  const pp=CAPS&&CAPS.papers?CAPS.papers.find(x=>x.name===$('#paper').value):null;
+  return new URLSearchParams({printer:$('#printer').value,paper:$('#paper').value,color:$('#color').value,
+    duplex:CAPS&&CAPS.duplex?$('#duplex').value:'off',orient:orient(),scale:$('#scale').value,pct:setPct($('#pct').value),
+    w:(pp&&pp.w)||210,h:(pp&&pp.h)||297}).toString()+numQS();
+}
+
+/* ---- scaling + preview ---- */
+const SC=[['fit','Fit to printable area'],['actual','Actual size (100%)'],['fill','Fill page (crop)'],['custom','Custom %']];
+const SCN={fit:'Whole page fitted inside the printable area. Nothing is cut off.',
+  actual:'Real size. Anything outside the printer\'s printable area is cut off.',
+  fill:'Page covers the whole printable area. The extra part is cropped.',
+  custom:'Percent of the real size (100% = actual size), always centered. Anything outside the printable area is cut off.'};
+['#scale','#pvscale'].forEach(id=>SC.forEach(([v,t])=>$(id).append(new Option(t,v))));
+function setScale(v){
+  $('#scale').value=v;$('#pvscale').value=v;$('#scnote').textContent=SCN[v];
+  $('#pctbox').hidden=$('#pctr').hidden=v!=='custom';
+  $('#pvpct').hidden=v!=='custom';
+}
+function setPct(v){
+  v=Math.max(10,Math.min(400,Math.round(parseFloat(v)||100)));
+  $('#pct').value=v;$('#pctr').value=Math.min(300,v);$('#pvpv').textContent=v+'%';return v;
+}
+let pctT=null;
+function pctChanged(){if(!$('#pv').hidden){clearTimeout(pctT);pctT=setTimeout(pvShow,350)}}
+$('#pct').oninput=()=>{if($('#pct').value!=='')pctChanged()};
+$('#pct').onchange=()=>{setPct($('#pct').value);pctChanged()};
+$('#pctr').oninput=()=>{setPct($('#pctr').value);pctChanged()};
+$('#pctm').onclick=()=>{setPct((parseFloat($('#pct').value)||100)-5);pctChanged()};
+$('#pctp').onclick=()=>{setPct((parseFloat($('#pct').value)||100)+5);pctChanged()};
+setScale('fit');
+$('#scale').onchange=()=>setScale($('#scale').value);
+$('#pvscale').onchange=()=>{setScale($('#pvscale').value);pvShow()};
+$('#pvpm').onclick=()=>{setPct((parseFloat($('#pct').value)||100)-5);pvShow()};
+$('#pvpp').onclick=()=>{setPct((parseFloat($('#pct').value)||100)+5);pvShow()};
+
+let PV={list:[],i:0,step:1};
+const dupOn=()=>CAPS&&CAPS.duplex&&!$('#profile').value&&$('#duplex').value!=='off';
+$('#bprev').onclick=()=>{
+  const s=sel();if(!s.length)return alert('Select at least one page');
+  if(!CAPS||CAPS.error)return alert('Select a printer first');
+  PV={list:s,i:0,step:dupOn()?2:1};
+  $('#pv').hidden=false;pvShow();
+};
+async function pvShow(){
+  const q=params(),stage=$('#pvstage');stage.innerHTML='';
+  const items=PV.list.slice(PV.i,PV.i+PV.step),n=PV.list.length;
+  let left=items.length;
+  $('#pvinfo').textContent='Loading preview…';
+  items.forEach((p,k)=>{
+    const im=el('img',{alt:''});
+    im.onload=im.onerror=()=>{if(--left===0)pvInfo(q)};
+    im.src=`/api/preview?f=${p.f}&p=${p.p}&${q}`;
+    const cap=PV.step===2?(k===0?'Front':'Back')+` · page ${PV.i+k+1}`:`Page ${PV.i+1} of ${n}`;
+    stage.append(el('div',{className:'pvsheet'},im,el('small',{className:'mut',textContent:cap})));
+  });
+  const a=PV.i+1,b=PV.i+items.length;
+  $('#pvpos').textContent=(items.length>1?`${a}–${b}`:`${a}`)+` / ${n}`;
+  $('#pvprev').disabled=PV.i<=0;
+  $('#pvnext').disabled=PV.i+PV.step>=n;
+}
+async function pvInfo(q){
+  try{
+    const a=await (await api('/api/area?'+q)).json();
+    $('#pvinfo').textContent=(a.driver?'From the printer driver: ':'Estimated (driver gave no area): ')+
+      `paper ${a.pw.toFixed(0)} × ${a.ph.toFixed(0)} mm, printable area ${a.aw.toFixed(0)} × ${a.ah.toFixed(0)} mm.`+
+      (dupOn()?' Two-sided: front and back are shown together.':'');
+  }catch{$('#pvinfo').textContent=''}
+}
+$('#pvprev').onclick=()=>{PV.i=Math.max(0,PV.i-PV.step);pvShow()};
+$('#pvnext').onclick=()=>{if(PV.i+PV.step<PV.list.length){PV.i+=PV.step;pvShow()}};
+$('#pvclose').onclick=()=>{$('#pv').hidden=true;$('#pvstage').innerHTML=''};
+let tx=null;
+$('#pvstage').addEventListener('touchstart',e=>{tx=e.touches[0].clientX},{passive:true});
+$('#pvstage').addEventListener('touchend',e=>{
+  if(tx===null)return;const dx=e.changedTouches[0].clientX-tx;tx=null;
+  if(dx<-50)$('#pvnext').click();else if(dx>50)$('#pvprev').click();
+},{passive:true});
+
+$('#bprint').onclick=async()=>{
+  const s=sel();if(!s.length)return alert('Select at least one page');
+  if(!CAPS||CAPS.error)return alert('Select a printer first');
+  const copies=Math.max(1,Math.min(99,parseInt($('#copies').value)||1));
+  const body={printer:$('#printer').value,paper:$('#paper').value,color:$('#color').value,
+    duplex:CAPS.duplex?$('#duplex').value:'off',orient:orient(),copies,
+    profile:$('#profile').value||'',scale:$('#scale').value,pct:setPct($('#pct').value),
+    num:NUM,pages:s.map(p=>[p.f,p.p]),title:CUR.title};
+  msg('Sending…');
+  const r=await api('/api/print',{method:'POST',headers:JH,body:JSON.stringify(body)});
+  const j=await r.json();if(!r.ok){msg('Error: '+j.error);return}
+  poll(j.id);
+};
+async function poll(id){
+  const r=await api('/api/job/'+id);const j=await r.json();
+  if(j.state==='run'){msg(`Printing ${j.done}/${j.total}…`);setTimeout(()=>poll(id),700)}
+  else if(j.state==='done')msg('✓ Sent to printer');
+  else msg('Error: '+j.error);
+}
+/* ---- page numbers + printer options: shared with the PC window ---- */
+function numQS(){return NUM.on?`&num=1&npos=${NUM.pos}&nalign=${NUM.align}&nsize=${NUM.size}&nstart=${NUM.start}&nmargin=${NUM.margin}&nbold=${NUM.bold?1:0}`:''}
+function fillNum(){
+  $('#nnon').checked=NUM.on;$('#nnpos').value=NUM.pos;$('#nnalign').value=NUM.align;$('#nnsize').value=NUM.size;
+  $('#nnstart').value=NUM.start;$('#nnmargin').value=NUM.margin;$('#nnbold').checked=NUM.bold;$('#nnbox').hidden=!NUM.on;
+}
+let nT=null;
+['#nnon','#nnpos','#nnalign','#nnsize','#nnstart','#nnmargin','#nnbold'].forEach(id=>$(id).addEventListener('input',()=>{
+  NUM.on=$('#nnon').checked;NUM.pos=$('#nnpos').value;NUM.align=$('#nnalign').value;
+  NUM.size=Math.max(6,Math.min(72,parseFloat($('#nnsize').value)||12));NUM.start=Math.max(1,parseInt($('#nnstart').value)||1);
+  NUM.margin=Math.max(2,Math.min(40,parseFloat($('#nnmargin').value)||8));NUM.bold=$('#nnbold').checked;$('#nnbox').hidden=!NUM.on;
+  clearTimeout(nT);nT=setTimeout(()=>api('/api/settings',{method:'POST',headers:JH,body:JSON.stringify({num:NUM})}),400);
+}));
+const hasOpt=(id,v)=>[...$(id).options].some(o=>o.value===v);
+function applyPrn(){
+  const s=PRN;
+  if(s.paper&&hasOpt('#paper',s.paper))$('#paper').value=s.paper;
+  if(s.color&&hasOpt('#color',s.color))$('#color').value=s.color;
+  if(CAPS&&CAPS.duplex&&s.duplex)$('#duplex').value=s.duplex;
+  if(s.orient)$('#orient').value=s.orient;
+  if(s.copies)$('#copies').value=s.copies;
+  if(s.scale)setScale(s.scale);
+  if(s.pct)setPct(s.pct);
+}
+function savePrn(e){
+  PRN=e&&e.target&&e.target.id==='printer'?{printer:$('#printer').value}:
+    {printer:$('#printer').value,paper:$('#paper').value,orient:$('#orient').value,color:$('#color').value,
+     duplex:$('#duplex').value,copies:$('#copies').value,scale:$('#scale').value,pct:$('#pct').value};
+  clearTimeout(prT);prT=setTimeout(()=>api('/api/settings',{method:'POST',headers:JH,body:JSON.stringify({prn:PRN})}),400);
+}
+['change','input'].forEach(ev=>$('#dlg').addEventListener(ev,e=>{
+  if(e.target.closest('#pgrid')||['profile','nnon','nnpos','nnalign','nnsize','nnstart','nnmargin','nnbold'].includes(e.target.id))return;savePrn(e);
+}));
+['#pctm','#pctp'].forEach(i=>$(i).addEventListener('click',()=>setTimeout(savePrn,0)));
+const same=(a,b)=>Object.keys(a).every(k=>a[k]==b[k])&&Object.keys(b).every(k=>a[k]==b[k]);
+async function loadSet(){
+  try{
+    const j=await (await api('/api/settings')).json();
+    if(j.num&&!same(j.num,NUM)){Object.assign(NUM,j.num)}
+    fillNum();
+    if(j.prn&&!same(j.prn,PRN)){PRN=j.prn;
+      if(CAPS&&!CAPS.error&&!$('#dlg').hidden){
+        if(PRN.printer&&PRN.printer!==$('#printer').value&&hasOpt('#printer',PRN.printer)){$('#printer').value=PRN.printer;loadCaps()}else applyPrn();
+      }}
+  }catch{}
+}
+/* live: files and settings changed on the PC (or another phone) appear here within a second */
+setInterval(async()=>{
+  if($('#main').hidden)return;
+  try{
+    const j=await (await api('/api/state')).json();
+    if(j.notice)alert(j.notice);
+    if(j.srev!==undefined&&j.srev!==SREV){const first=SREV===-1;SREV=j.srev;if(!first)loadSet()}
+    if(j.rev!==REV){REV=j.rev;FILES=j.files;render()}
+  }catch{}
+},1200);
+fetch('/api/files').then(r=>{if(r.status===401)show('login');else init()});
+</script>
+</body>
+</html>
