@@ -1,0 +1,816 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PC Print</title>
+<style>
+:root{--bg:#e9ebef;--card:#fff;--tx:#1b1f24;--mut:#6b7280;--pri:#2563eb;--bd:#e0e3e8;--hov:#eef2ff}
+@media(prefers-color-scheme:dark){:root{--bg:#0b0d11;--card:#161a20;--tx:#e8eaed;--mut:#9aa3af;--bd:#2a313a;--hov:#1d2740}}
+*{box-sizing:border-box}[hidden]{display:none!important}
+html,body{height:100%}
+body{margin:0;font:14px system-ui,"Segoe UI",sans-serif;background:var(--bg);color:var(--tx);display:flex;flex-direction:column;overflow:hidden}
+button,select,input[type=number],input[type=text],.btn{font:inherit;border-radius:9px;border:1px solid var(--bd);background:var(--card);color:var(--tx);padding:7px 12px;cursor:pointer}
+button:hover:not(:disabled){border-color:var(--pri)}
+button.p{background:var(--pri);color:#fff;border-color:var(--pri);font-weight:600}
+button.p:hover:not(:disabled){filter:brightness(1.1)}
+button.x{padding:5px 9px;color:#dc2626}
+button.s{padding:5px 9px}
+button:disabled,select:disabled{opacity:.45;cursor:default}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.grow{flex:1;min-width:0}
+.name{font-weight:600;overflow-wrap:anywhere}
+.mut{color:var(--mut);font-size:12.5px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:10px;margin-bottom:10px}
+h1{font-size:17px;margin:0 6px 0 0;white-space:nowrap}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.field{display:flex;flex-direction:column;gap:3px;margin-bottom:8px;min-width:0}
+.field label{font-size:12px;color:var(--mut)}
+.field select,.field input{width:100%}
+body.s1 .s2only,body.s2 .s1only{display:none!important}
+
+/* ---------- top bar ---------- */
+#bar{flex:none;z-index:8;background:var(--card);padding:8px 14px;border-bottom:1px solid var(--bd)}
+#bar button,#bar label{white-space:nowrap}
+.zg{display:flex;gap:4px;align-items:center}
+.zg #rz{min-width:56px}
+.dd{position:relative}
+.pop{position:absolute;top:calc(100% + 8px);left:0;width:340px;z-index:20;box-shadow:0 8px 30px rgba(0,0,0,.35);margin:0}
+.pop p{margin:4px 0}
+
+/* ---------- layout: sliding side panel + full stage ---------- */
+.main{flex:1;min-height:0;display:flex;position:relative;overflow:hidden}
+.side{flex:none;width:320px;overflow:auto;padding:12px;background:var(--card);border-right:1px solid var(--bd);transition:margin-left .25s ease}
+.main.collapsed .side{margin-left:-321px}
+.side h3{margin:0 0 8px;font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--mut)}
+.side p.mut{margin:3px 0;font-size:12px}
+.side p.mut:empty{display:none}
+.side select,.side input[type=number]{padding:6px 9px}
+.stage{flex:1;min-width:0;min-height:0;position:relative;display:flex;flex-direction:column}
+
+/* ---------- step 1: book-style scrolling pages ---------- */
+#pages{flex:1;min-height:0;overflow:auto;padding:12px}
+.rp{width:calc(min(900px,100%)*var(--rz,1));margin:0 auto 18px;background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:8px 8px 6px}
+.rp .ph{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.rp .cap{font-size:12.5px;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rp .sel{display:flex;align-items:center;gap:5px;font-size:12.5px;cursor:pointer;white-space:nowrap}
+.rp img{width:100%;display:block;border-radius:3px;background:#fff;min-height:160px;box-shadow:0 2px 10px rgba(0,0,0,.3)}
+.rp.off img{opacity:.3}
+.rp.off .badge{background:#6b7280}
+.badge{min-width:28px;height:28px;padding:0 8px;border-radius:14px;background:var(--pri);color:#fff;font-weight:700;font-size:15px;display:inline-flex;align-items:center;justify-content:center;flex:none}
+.empty{margin:auto;text-align:center;padding:40px 10px}
+.empty .big{font-size:20px;font-weight:600;margin-bottom:6px}
+.empty button{font-size:16px;padding:12px 24px;margin-top:14px}
+.fcard{padding:9px 10px;margin-bottom:8px}
+.fcard .name{font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fcard .row{gap:5px;margin-top:6px}
+.fcard .num{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:11px;background:var(--pri);color:#fff;font-size:12px;font-weight:700;margin-right:6px}
+.selbox .cnt{font-size:15px;font-weight:700}
+.selbox input[type=text]{padding:6px 9px;min-width:0}
+.thg{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:0 0 12px}
+.tn{position:relative;height:118px;border:2px solid var(--bd);border-radius:8px;background:rgba(127,127,127,.12);display:flex;align-items:center;justify-content:center;cursor:pointer;overflow:hidden}
+.tn:hover{border-color:var(--pri)}
+.tn img{max-width:100%;max-height:100%;object-fit:contain;background:#fff}
+.tn.off img{opacity:.35}
+.tn.cur{border-color:var(--pri);box-shadow:0 0 0 2px var(--pri)}
+.tn .tb{position:absolute;left:4px;top:4px;min-width:22px;height:22px;padding:0 6px;border-radius:11px;background:var(--pri);color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.tn.off .tb{background:#6b7280}
+.tn input{position:absolute;right:4px;top:4px;width:18px;height:18px;margin:0;cursor:pointer}
+.fdet summary{cursor:pointer;font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--mut);margin:4px 0 8px;font-weight:600}
+
+/* ---------- step 2: preview + status ---------- */
+.pvstage{flex:1;min-height:0;overflow:auto;padding:14px}
+.pvrow{display:flex;gap:14px;justify-content:center;margin:0 auto 18px;width:max-content;min-width:100%}
+.pvsheet{flex:0 0 auto;text-align:center}
+.pvsheet img{width:100%;display:block;border-radius:3px;box-shadow:0 2px 14px rgba(0,0,0,.4);background:#fff;min-height:120px}
+.pvsheet small{display:block;margin-top:4px}
+.pill{position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:5;background:#111;color:#fff;padding:9px 18px;border-radius:22px;font-weight:600;box-shadow:0 4px 16px rgba(0,0,0,.4);cursor:pointer;max-width:90%}
+.pill.ok{background:#15803d}.pill.err{background:#b91c1c}
+.lg{display:inline-block;width:12px;height:12px;vertical-align:-1px;margin-right:4px;border-radius:2px}
+
+#drop{position:fixed;inset:0;z-index:40;background:rgba(37,99,235,.18);display:flex;align-items:center;justify-content:center;pointer-events:none}
+#drop div{border:3px dashed var(--pri);background:var(--card);border-radius:18px;padding:36px 54px;font-size:22px;font-weight:600;text-align:center}
+#toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:#111;color:#fff;padding:10px 16px;border-radius:10px;z-index:30;max-width:80%;white-space:pre-line}
+
+@media(max-width:900px){
+  .side{position:absolute;z-index:6;top:0;bottom:0;left:0;max-width:88%;box-shadow:4px 0 24px rgba(0,0,0,.35)}
+  .main.collapsed .side{margin-left:-110%}
+}
+</style>
+</head>
+<body class="s1">
+<div id="bar"><div class="row">
+  <button id="bside" title="Show / hide the side panel">☰</button>
+  <h1>🖨 PC Print</h1>
+  <span id="stepname" class="mut">Step 1 of 2 · Check pages</span>
+
+  <span class="s1only row" style="gap:6px">
+    <button id="add" class="p">＋ Add files</button>
+    <button id="bpaste" title="Paste copied files or a copied picture (Ctrl+V)">📋 Paste</button>
+  </span>
+  <div class="dd">
+    <button id="bnum">🔢 Page numbers</button>
+    <div id="numpanel" class="card pop" hidden>
+      <label class="row"><input type="checkbox" id="numon"> <span class="name">Add page numbers to all pages</span></label>
+      <p class="mut">Printed directly on the page in Times New Roman. All files count as one document (1, 2, 3…).</p>
+      <div class="two">
+        <div class="field"><label>Position</label>
+          <select id="numpos"><option value="bottom">Bottom</option><option value="top">Top</option></select></div>
+        <div class="field"><label>Align</label>
+          <select id="numalign"><option value="center">Center</option><option value="right">Right</option><option value="left">Left</option></select></div>
+        <div class="field"><label>Font size (pt)</label>
+          <input id="numsize" type="number" min="6" max="72" step="1" value="12"></div>
+        <div class="field"><label>Start at</label>
+          <input id="numstart" type="number" min="1" step="1" value="1"></div>
+        <div class="field"><label>Edge distance (mm)</label>
+          <input id="nummargin" type="number" min="2" max="40" step="1" value="8"></div>
+        <div class="field"><label>Style</label>
+          <label class="row"><input type="checkbox" id="numbold"> <b>Bold</b></label></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="dd">
+    <button id="bph" title="Connect a phone (QR code)">📱 Phone</button>
+    <div id="phpanel" class="card pop" hidden>
+      <div style="text-align:center"><img id="phqr" alt="" style="width:180px;height:180px;background:#fff;border-radius:8px"></div>
+      <p class="mut" id="phurl" style="text-align:center;margin:6px 0;word-break:break-all"></p>
+      <div class="row" style="justify-content:center"><button id="phcopy" class="s">Copy link</button></div>
+      <label class="row" style="margin-top:8px"><input type="checkbox" id="phon"> <span class="name">Ask for a 4-digit PIN on the phone</span></label>
+      <div class="two">
+        <div class="field"><label>PIN</label><input id="phpin" type="text" maxlength="4" inputmode="numeric" autocomplete="off"></div>
+        <div class="field"><label>Port</label><input id="phport" type="text" maxlength="5" inputmode="numeric" autocomplete="off"></div>
+      </div>
+      <button id="phsave" class="p s">Save</button>
+      <p class="mut" id="phmsg"></p>
+    </div>
+  </div>
+
+  <span class="zg">
+    <button id="zout" class="s" title="Zoom out (Ctrl + wheel)">−</button>
+    <button id="rz" class="s" title="Reset zoom (Ctrl+0)">100%</button>
+    <button id="zin" class="s" title="Zoom in (Ctrl + wheel)">＋</button>
+    <button id="rfit" class="s" title="Fit one whole page on the screen">⤢ Fit page</button>
+  </span>
+
+  <span class="grow"></span>
+  <label id="autolbl" class="row mut" hidden title="Open PC Print minimized when Windows starts"><input type="checkbox" id="auto"> Start with Windows</label>
+  <button id="bopen" class="p s1only">Preview &amp; Print →</button>
+  <button id="close" class="s2only">← Back to pages</button>
+  <button id="bprint" class="p s2only">🖨 Print</button>
+</div></div>
+
+<div class="main" id="main">
+
+  <!-- side panel, step 1 -->
+  <aside class="side" id="sideA">
+    <div class="card selbox">
+      <h3>Pages to print</h3>
+      <div class="row"><span class="cnt grow" id="scount"></span>
+        <button id="sall" class="s">All</button><button id="snone" class="s">None</button></div>
+      <div class="row" style="margin-top:8px;flex-wrap:nowrap">
+        <input id="prange" type="text" class="grow" autocomplete="off" spellcheck="false" placeholder="e.g. 1-5, 8, 10-12">
+        <button id="bapply" class="s p">Apply</button>
+      </div>
+      <p class="mut">Type pages and press Enter, or tick the small pages below. Click a small page to jump to it.</p>
+    </div>
+    <div id="thumbs" class="thg"></div>
+    <details class="fdet"><summary id="fsum">Files</summary><div id="flist"></div></details>
+  </aside>
+
+  <!-- side panel, step 2 -->
+  <aside class="side" id="sideB" hidden>
+    <div id="setp">
+      <h3>Print settings</h3>
+      <div class="field"><label>Printer</label><select id="printer"></select></div>
+      <div class="field"><label>Profile (saved driver settings)</label>
+        <select id="profile"><option value="">None (normal way)</option></select>
+        <div class="row" style="gap:6px;margin-top:4px">
+          <button id="bprof" class="grow s">⚙ Printer Properties</button>
+          <button id="bdel" class="x" hidden>🗑</button>
+        </div>
+        <p class="mut" id="pnote"></p>
+      </div>
+      <div class="two">
+        <div class="field"><label>Paper size</label><select id="paper"></select></div>
+        <div class="field"><label>Orientation</label>
+          <select id="orient">
+            <option value="auto">Auto</option>
+            <option value="portrait">Portrait</option>
+            <option value="landscape">Landscape</option>
+          </select></div>
+        <div class="field"><label>Color</label><select id="color"></select></div>
+        <div class="field" id="duprow"><label>Two-sided</label>
+          <select id="duplex">
+            <option value="off">Off (one side)</option>
+            <option value="long">Long edge</option>
+            <option value="short">Short edge</option>
+          </select></div>
+        <div class="field"><label>Copies</label><input id="copies" type="number" min="1" max="99" value="1" inputmode="numeric"></div>
+        <div class="field"><label>Scaling</label><select id="scale"></select></div>
+      </div>
+      <div id="pctbox" class="row" hidden style="margin-bottom:6px">
+        <button id="pctm" type="button">−</button>
+        <input id="pct" type="number" min="10" max="400" step="5" value="100" inputmode="numeric" style="width:80px">
+        <span>%</span>
+        <button id="pctp" type="button">+</button>
+      </div>
+      <input id="pctr" type="range" min="10" max="300" step="5" value="100" hidden style="width:100%">
+      <p class="mut" id="scnote"></p>
+      <label class="row" style="margin-top:4px"><input type="checkbox" id="pnumon"> <span class="name">Add page numbers</span></label>
+      <p class="mut" id="numnote"></p>
+      <p class="mut" id="dnote"></p>
+    </div>
+    <p class="mut" style="margin-top:10px">
+      <span class="lg" style="background:#cdd0d6;border:1px solid #888"></span>printer cannot print here<br>
+      <span class="lg" style="background:#fff;border:2px dashed #2563eb"></span>printable area
+    </p>
+    <p class="mut" id="pvinfo"></p>
+  </aside>
+
+  <!-- step 1 stage -->
+  <section class="stage" id="v1">
+    <div id="empty" class="empty" hidden>
+      <div class="big">No file open</div>
+      <div class="mut">PDF and images only. Drag files here, press Ctrl+V to paste, or right-click a file → Open with → PC Print.</div>
+      <button id="add2" class="p">Choose files</button>
+    </div>
+    <div id="pages"></div>
+  </section>
+
+  <!-- step 2 stage -->
+  <section class="stage" id="v2" hidden>
+    <div id="pmsg" class="pill" hidden title="Click to dismiss"></div>
+    <div class="pvstage" id="pvstage"></div>
+  </section>
+</div>
+
+<div id="drop" hidden><div>⬇ Drop files here<br><span class="mut">PDF or images</span></div></div>
+<div id="toast" hidden></div>
+
+<script>
+const $=s=>document.querySelector(s);
+let FILES=[],REV=-1,CAPS=null,STEP=1,SREV=-1,PRN={},prT=null;
+const DESEL=new Set();               // pages the user unticked: "fileId:pageIndex"
+const NUM={on:false,pos:'bottom',align:'center',size:12,start:1,bold:false,margin:8};
+const JH={'Content-Type':'application/json'};
+function el(t,props={},...kids){const e=document.createElement(t);Object.assign(e,props);kids.forEach(k=>e.append(k));return e}
+async function api(url,opt){return fetch(url,opt)}
+let tT=null;
+function toast(t){const b=$('#toast');b.textContent=t;b.hidden=false;clearTimeout(tT);tT=setTimeout(()=>b.hidden=true,4500)}
+const key=(f,p)=>f+':'+p;
+
+/* ---------------- page list helpers ---------------- */
+function allPages(){
+  const out=[];let n=0;
+  FILES.forEach(f=>{for(let i=0;i<f.pages;i++){n++;
+    out.push({f:f.id,p:i,n,land:f.lands[i],name:f.name,label:`${f.name}${f.pages>1?' · page '+(i+1):''}`})}});
+  return out;
+}
+const selPages=()=>allPages().filter(p=>!DESEL.has(key(p.f,p.p)));
+function compress(nums){
+  const out=[];let i=0;
+  while(i<nums.length){let j=i;while(j+1<nums.length&&nums[j+1]===nums[j]+1)j++;
+    out.push(j>i?(j>i+1?`${nums[i]}-${nums[j]}`:`${nums[i]}, ${nums[j]}`):`${nums[i]}`);i=j+1}
+  return out.join(', ');
+}
+function updateCount(){
+  const all=allPages(),sel=all.filter(p=>!DESEL.has(key(p.f,p.p)));
+  $('#scount').textContent=`${sel.length} of ${all.length} selected`;
+  const r=$('#prange');
+  r.placeholder=sel.length===0&&all.length?'None selected':'All pages · e.g. 1-5, 8, 10-12';
+  if(document.activeElement!==r)r.value=sel.length===all.length||!sel.length?'':compress(sel.map(p=>p.n));
+}
+function parseRange(t){
+  const total=allPages().length,out=new Set(),bad=[];let over=false;
+  t.replace(/\s*[-–—:]\s*/g,'-').split(/[,;\s]+/).filter(Boolean).forEach(tok=>{
+    const m=tok.match(/^(\d+)(?:-(\d+))?$/);
+    if(!m){bad.push(tok);return}
+    let a=+m[1],b=m[2]?+m[2]:a;if(a>b)[a,b]=[b,a];
+    if(b>total||a<1)over=true;
+    for(let i=Math.max(1,a);i<=Math.min(b,total);i++)out.add(i);
+  });
+  return {out,bad,over,total};
+}
+function applyRange(){
+  const t=$('#prange').value.trim();
+  if(!t){selectAll(true);return}
+  const r=parseRange(t);
+  if(r.bad.length)return toast('Cannot read: '+r.bad.join(', ')+'\nUse a format like 1-5, 8, 10-12');
+  if(!r.out.size)return toast(`No such page. This document has ${r.total} page${r.total>1?'s':''}.`);
+  allPages().forEach(p=>setSel(key(p.f,p.p),r.out.has(p.n)));
+  if(r.over)toast(`Pages beyond ${r.total} were ignored`);
+  $('#prange').blur();updateCount();
+}
+$('#bapply').onclick=applyRange;
+$('#prange').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();applyRange()}});
+function jobTitle(list){
+  const names=[...new Set(list.map(p=>p.name))];
+  return names[0]+(names.length>1?' +'+(names.length-1):'');
+}
+
+/* ---------------- files + reader ---------------- */
+async function refresh(force){
+  let j;try{j=await (await api('/api/state')).json()}catch{return}
+  if(j.notice)toast(j.notice);
+  if(j.srev!==undefined&&j.srev!==SREV){const first=SREV===-1;SREV=j.srev;if(!first)syncSettings()}
+  if(force||j.rev!==REV){
+    REV=j.rev;FILES=j.files;renderFiles();renderPages();
+    if(STEP===2){if(!FILES.length)go(1);else pvRefresh()}
+  }
+}
+async function pickFiles(){
+  try{
+    const j=await (await api('/api/pick',{method:'POST'})).json();
+    if(j.error)toast(j.error);
+  }catch(e){toast('Could not open the file window')}
+  refresh(true);
+}
+$('#add').onclick=pickFiles;$('#add2').onclick=pickFiles;
+
+function printOnly(id){
+  DESEL.clear();
+  FILES.forEach(g=>{if(g.id!==id)for(let p=0;p<g.pages;p++)DESEL.add(key(g.id,p))});
+  renderPages();go(2);
+}
+function renderFiles(){
+  const L=$('#flist');L.innerHTML='';
+  $('#empty').hidden=FILES.length>0;
+  $('#fsum').textContent=`Files (${FILES.length}) · reorder / remove`;
+  FILES.forEach((f,i)=>{
+    const meta=f.kind==='pdf'?`PDF · ${f.pages} page${f.pages>1?'s':''}`:'Image';
+    const pr=el('button',{className:'s',textContent:'🖨 Only this',title:'Print only this file'});
+    pr.onclick=()=>printOnly(f.id);
+    const up=el('button',{className:'s',textContent:'↑',disabled:i===0});
+    up.onclick=async()=>{await api('/api/move',{method:'POST',headers:JH,body:JSON.stringify({id:f.id,dir:'up'})});refresh(true)};
+    const dn=el('button',{className:'s',textContent:'↓',disabled:i===FILES.length-1});
+    dn.onclick=async()=>{await api('/api/move',{method:'POST',headers:JH,body:JSON.stringify({id:f.id,dir:'down'})});refresh(true)};
+    const x=el('button',{className:'x',textContent:'✕'});
+    x.onclick=async()=>{await api('/api/files/'+f.id,{method:'DELETE'});refresh(true)};
+    const nm=el('div',{className:'name',title:f.name},el('span',{className:'num',textContent:i+1}),f.name);
+    L.append(el('div',{className:'card fcard'},nm,el('div',{className:'mut',textContent:meta}),
+      el('div',{className:'row'},pr,el('span',{className:'grow'}),up,dn,x)));
+  });
+  if(FILES.length>1){
+    const c=el('button',{className:'x',textContent:'Remove all files'});
+    c.onclick=async()=>{if(confirm('Remove all files?')){await api('/api/files',{method:'DELETE'});refresh(true)}};
+    L.append(el('p',{},c));
+  }
+}
+function numQS(){
+  return NUM.on?`&num=1&npos=${NUM.pos}&nalign=${NUM.align}&nsize=${NUM.size}&nstart=${NUM.start}&nmargin=${NUM.margin}&nbold=${NUM.bold?1:0}`:'';
+}
+
+/* zoom: step 1 = page width, step 2 = preview sheet size */
+let RZ=1,rzT=null,rzQ=1,PZ=1,PW=720,pzT=null;
+const baseW=()=>Math.min(900,($('#pages').clientWidth||800)-24);
+const qFor=z=>{const need=baseW()*z*(window.devicePixelRatio||1)/800;return need<=1?1:need<=1.5?1.5:need<=2?2:3};
+function zoomLabel(){$('#rz').textContent=Math.round((STEP===1?RZ:PZ)*100)+'%'}
+function viewSrc(f,p){return `/api/view?f=${f}&p=${p}&q=${rzQ}${numQS()}&v=${REV}`}
+function reloadViews(){rzQ=qFor(RZ);document.querySelectorAll('#pages img').forEach(im=>{im.src=viewSrc(im.dataset.f,im.dataset.p)})}
+function setRZ(z){
+  z=Math.max(.3,Math.min(3,Math.round(z*100)/100));
+  const P=$('#pages'),span=P.scrollHeight-P.clientHeight;
+  const ratio=span>0?P.scrollTop/span:0;
+  RZ=z;P.style.setProperty('--rz',z);zoomLabel();
+  const ns=P.scrollHeight-P.clientHeight;if(ns>0)P.scrollTop=ratio*ns;
+  clearTimeout(rzT);rzT=setTimeout(()=>{if(qFor(RZ)!==rzQ)reloadViews()},400);
+}
+function setPZ(z){
+  PZ=Math.max(.4,Math.min(4,Math.round(z*100)/100));zoomLabel();
+  const w=pvSheetW()+'px';document.querySelectorAll('.pvsheet').forEach(x=>x.style.width=w);
+  clearTimeout(pzT);pzT=setTimeout(()=>{if(STEP===2&&pvNeedPw()!==PW)pvRender()},400);
+}
+const zoomBy=f=>STEP===1?setRZ(RZ*f):setPZ(PZ*f);
+const zoomReset=()=>STEP===1?setRZ(1):setPZ(1);
+$('#zin').onclick=()=>zoomBy(1.15);$('#zout').onclick=()=>zoomBy(1/1.15);$('#rz').onclick=zoomReset;
+$('#rfit').onclick=()=>{
+  if(STEP===2)return setPZ(1);
+  const P=$('#pages'),im=P.querySelector('img');
+  const ratio=im&&im.naturalWidth?im.naturalHeight/im.naturalWidth:1.414;
+  setRZ((P.clientHeight-80)/(baseW()*ratio));
+};
+let ELS={},curK=null,mkT=0;
+function setSel(k,on){
+  on?DESEL.delete(k):DESEL.add(k);
+  const e=ELS[k];if(!e)return;
+  e.cb.checked=on;e.tcb.checked=on;e.rp.classList.toggle('off',!on);e.th.classList.toggle('off',!on);
+}
+function selectAll(on){allPages().forEach(p=>setSel(key(p.f,p.p),on));updateCount()}
+function goPage(rp){
+  const P=$('#pages');
+  P.scrollTo({top:P.scrollTop+rp.getBoundingClientRect().top-P.getBoundingClientRect().top-12,behavior:'smooth'});
+}
+function markCur(){
+  if(STEP!==1)return;
+  const P=$('#pages'),pt=P.getBoundingClientRect().top;let best=null;
+  for(const k in ELS){
+    if(best===null||ELS[k].rp.getBoundingClientRect().top-pt<=P.clientHeight*0.35)best=k;else break;
+  }
+  if(best!==curK){
+    if(curK&&ELS[curK])ELS[curK].th.classList.remove('cur');
+    curK=best;if(best&&ELS[best])ELS[best].th.classList.add('cur');
+  }
+}
+$('#pages').addEventListener('scroll',()=>{if(!mkT)mkT=requestAnimationFrame(()=>{mkT=0;markCur()})},{passive:true});
+function renderPages(){
+  const box=$('#pages'),tb=$('#thumbs');box.innerHTML='';tb.innerHTML='';ELS={};curK=null;rzQ=qFor(RZ);
+  allPages().forEach(p=>{
+    const k=key(p.f,p.p),on=!DESEL.has(k);
+    const cb=el('input',{type:'checkbox',checked:on});
+    const im=el('img',{loading:'lazy',alt:'',src:viewSrc(p.f,p.p)});im.dataset.f=p.f;im.dataset.p=p.p;
+    const rp=el('div',{className:'rp'+(on?'':' off')},
+      el('div',{className:'ph'},el('b',{className:'badge',textContent:p.n}),
+        el('span',{className:'cap grow',textContent:p.label,title:p.label}),
+        el('label',{className:'sel'},cb,'Print')),
+      im);
+    const tcb=el('input',{type:'checkbox',checked:on,title:'Print this page'});
+    const th=el('div',{className:'tn'+(on?'':' off'),title:p.label},
+      el('img',{loading:'lazy',alt:'',src:`/api/thumb?f=${p.f}&p=${p.p}`}),
+      el('b',{className:'tb',textContent:p.n}),tcb);
+    cb.onchange=()=>{setSel(k,cb.checked);updateCount()};
+    tcb.onchange=()=>{setSel(k,tcb.checked);updateCount()};
+    th.onclick=e=>{if(e.target!==tcb)goPage(rp)};
+    ELS[k]={rp,cb,th,tcb};
+    box.append(rp);tb.append(th);
+  });
+  updateCount();markCur();
+}
+$('#sall').onclick=()=>selectAll(true);
+$('#snone').onclick=()=>selectAll(false);
+
+/* ---------------- steps ---------------- */
+function go(n){
+  if(n===2){
+    if(!FILES.length)return toast('Add a file first');
+    if(!selPages().length)return toast('Tick at least one page to print');
+  }
+  STEP=n;document.body.className='s'+n;
+  $('#v1').hidden=n!==1;$('#v2').hidden=n!==2;
+  $('#sideA').hidden=n!==1;$('#sideB').hidden=n!==2;
+  $('#stepname').textContent=n===1?'Step 1 of 2 · Check pages':'Step 2 of 2 · Preview & print';
+  zoomLabel();if(n===1)markCur();
+  if(n===2){msg('');numNote();if(!CAPS||CAPS.error)loadPrinters();else pvRender()}
+}
+$('#bopen').onclick=()=>go(2);
+$('#close').onclick=()=>go(1);
+$('#bside').onclick=()=>{
+  $('#main').classList.toggle('collapsed');
+  setTimeout(()=>{zoomBy(1)},300);
+};
+if(innerWidth<900)$('#main').classList.add('collapsed');
+let rsT=null;window.addEventListener('resize',()=>{clearTimeout(rsT);rsT=setTimeout(()=>zoomBy(1),250)});
+
+/* ---------------- drag & drop, paste ---------------- */
+function busy(){return STEP===2}
+async function uploadFiles(list){
+  const files=[...list];if(!files.length)return;
+  if(busy())return toast('Go back to the pages first');
+  const fd=new FormData();files.forEach(f=>fd.append('file',f,f.name));
+  toast(`Adding ${files.length} file${files.length>1?'s':''}…`);
+  try{
+    const j=await (await api('/api/upload',{method:'POST',body:fd})).json();
+    if(j.added)toast(`Added ${j.added} file${j.added>1?'s':''}`);
+  }catch(e){toast('Could not add the files')}
+  refresh(true);
+}
+async function pasteClipboard(){
+  if(busy())return toast('Go back to the pages first');
+  try{
+    const j=await (await api('/api/paste',{method:'POST'})).json();
+    if(j.added)toast(`Added ${j.added} file${j.added>1?'s':''}`);
+    else if(j.errors&&j.errors.length)toast(j.errors.join('\n'));
+  }catch(e){toast('Could not paste')}
+  refresh(true);
+}
+$('#bpaste').onclick=pasteClipboard;
+let dragN=0;
+const hasFiles=e=>e.dataTransfer&&[...e.dataTransfer.types].includes('Files');
+window.addEventListener('dragenter',e=>{if(!hasFiles(e))return;e.preventDefault();dragN++;$('#drop').hidden=false});
+window.addEventListener('dragover',e=>{if(!hasFiles(e))return;e.preventDefault();e.dataTransfer.dropEffect='copy'});
+window.addEventListener('dragleave',e=>{if(!hasFiles(e))return;dragN=Math.max(0,dragN-1);if(!dragN)$('#drop').hidden=true});
+window.addEventListener('drop',e=>{
+  if(!hasFiles(e))return;
+  e.preventDefault();dragN=0;$('#drop').hidden=true;
+  uploadFiles(e.dataTransfer.files);
+});
+document.addEventListener('paste',e=>{
+  const t=e.target;if(t&&/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)&&t.type!=='checkbox')return;
+  e.preventDefault();
+  const fl=e.clipboardData&&e.clipboardData.files;
+  if(fl&&fl.length)uploadFiles(fl);else pasteClipboard();
+});
+
+/* ---------------- page numbers ---------------- */
+async function loadSettings(){
+  try{
+    const j=await (await api('/api/settings')).json();
+    if(j.num)Object.assign(NUM,j.num);
+    if(j.prn)PRN=j.prn;
+  }catch{}
+  fillNum();
+}
+function fillNum(){
+  $('#numon').checked=NUM.on;$('#numpos').value=NUM.pos;$('#numalign').value=NUM.align;
+  $('#numsize').value=NUM.size;$('#numstart').value=NUM.start;
+  $('#nummargin').value=NUM.margin;$('#numbold').checked=NUM.bold;
+}
+/* settings changed on the other side (phone) -> follow them here */
+const same=(a,b)=>Object.keys(a).every(k=>a[k]==b[k])&&Object.keys(b).every(k=>a[k]==b[k]);
+async function syncSettings(){
+  let j;try{j=await (await api('/api/settings')).json()}catch{return}
+  if(j.num&&!same(j.num,NUM)){Object.assign(NUM,j.num);fillNum();numNote();renderPages();if(STEP===2)pvRefresh()}
+  if(j.prn&&!same(j.prn,PRN)){PRN=j.prn;await applyPrnAll()}
+}
+function applyPrn(){
+  const s=PRN,has=(id,v)=>[...$(id).options].some(o=>o.value===v);
+  if(s.paper&&has('#paper',s.paper))$('#paper').value=s.paper;
+  if(s.color&&has('#color',s.color))$('#color').value=s.color;
+  if(CAPS&&CAPS.duplex&&s.duplex)$('#duplex').value=s.duplex;
+  if(s.orient)$('#orient').value=s.orient;
+  if(s.copies)$('#copies').value=s.copies;
+  if(s.scale)setScale(s.scale);
+  if(s.pct)setPct(s.pct);
+}
+async function applyPrnAll(){
+  if(!CAPS||CAPS.error)return;
+  const s=$('#printer');
+  if(PRN.printer&&PRN.printer!==s.value&&[...s.options].some(o=>o.value===PRN.printer)){s.value=PRN.printer;await loadCaps();return}
+  applyPrn();if(STEP===2)pvRefresh();
+}
+function savePrn(e){
+  PRN=e&&e.target&&e.target.id==='printer'?{printer:$('#printer').value}:
+    {printer:$('#printer').value,paper:$('#paper').value,orient:$('#orient').value,color:$('#color').value,
+     duplex:$('#duplex').value,copies:$('#copies').value,scale:$('#scale').value,pct:$('#pct').value};
+  clearTimeout(prT);prT=setTimeout(()=>api('/api/settings',{method:'POST',headers:JH,body:JSON.stringify({prn:PRN})}),400);
+}
+['change','input'].forEach(ev=>$('#setp').addEventListener(ev,e=>{if(!['profile','pnumon'].includes(e.target.id))savePrn(e)}));
+['#pctm','#pctp'].forEach(i=>$(i).addEventListener('click',()=>setTimeout(savePrn,0)));
+let numT=null;
+function numChanged(){
+  NUM.on=$('#numon').checked;NUM.pos=$('#numpos').value;NUM.align=$('#numalign').value;
+  NUM.size=Math.max(6,Math.min(72,parseFloat($('#numsize').value)||12));
+  NUM.start=Math.max(1,parseInt($('#numstart').value)||1);
+  NUM.margin=Math.max(2,Math.min(40,parseFloat($('#nummargin').value)||8));
+  NUM.bold=$('#numbold').checked;
+  api('/api/settings',{method:'POST',headers:JH,body:JSON.stringify({num:NUM})});
+  numNote();
+  clearTimeout(numT);numT=setTimeout(()=>{renderPages();if(STEP===2)pvRefresh()},300);
+}
+['#numon','#numpos','#numalign','#numsize','#numstart','#nummargin','#numbold'].forEach(id=>$(id).addEventListener('input',numChanged));
+$('#bnum').onclick=e=>{e.stopPropagation();$('#phpanel').hidden=true;$('#numpanel').hidden=!$('#numpanel').hidden};
+document.addEventListener('click',e=>{if(!e.target.closest('.dd')){$('#numpanel').hidden=true;$('#phpanel').hidden=true}});
+/* ---------------- phone connection ---------------- */
+let phUrl='';
+async function phLoad(){
+  try{
+    const d=await (await api('/api/phone/info')).json();
+    phUrl=d.url;$('#phqr').src='/api/phone/qr?t='+Date.now();
+    $('#phurl').textContent=d.active?d.url:'This port is busy, so the phone link is off. Choose another port.';
+    $('#phon').checked=d.pw_on;$('#phpin').value=d.pin;$('#phport').value=d.port;
+  }catch{$('#phurl').textContent='Could not read phone settings'}
+}
+$('#bph').onclick=e=>{e.stopPropagation();$('#numpanel').hidden=true;const p=$('#phpanel');p.hidden=!p.hidden;if(!p.hidden)phLoad()};
+$('#phcopy').onclick=()=>{navigator.clipboard&&navigator.clipboard.writeText(phUrl);$('#phcopy').textContent='Copied ✓';setTimeout(()=>$('#phcopy').textContent='Copy link',1500)};
+$('#phsave').onclick=async()=>{
+  try{
+    const r=await api('/api/phone/set',{method:'POST',headers:JH,body:JSON.stringify({pw_on:$('#phon').checked,pin:$('#phpin').value,port:$('#phport').value})});
+    const d=await r.json();
+    if(!r.ok){$('#phmsg').textContent=d.error;return}
+    $('#phmsg').textContent='Saved ✓';
+    if(String(d.port)!==location.port)location.href='http://127.0.0.1:'+d.port+'/';else phLoad();
+  }catch(e){$('#phmsg').textContent='Could not save'}
+};
+function numNote(){
+  $('#pnumon').checked=NUM.on;
+  $('#numnote').textContent=NUM.on
+    ?`${NUM.pos==='top'?'Top':'Bottom'}, ${NUM.align}, ${NUM.size} pt${NUM.bold?', bold':''}, ${NUM.margin} mm from the edge, starting at ${NUM.start}. Change with the Page numbers button.`
+    :'No page numbers will be printed.';
+}
+$('#pnumon').onchange=()=>{$('#numon').checked=$('#pnumon').checked;numChanged()};
+
+/* ---------------- printer + settings ---------------- */
+function msg(t){
+  const b=$('#pmsg');b.textContent=t;b.hidden=!t;
+  b.className='pill'+(t.startsWith('✓')?' ok':/^Error/.test(t)?' err':'');
+}
+$('#pmsg').onclick=()=>$('#pmsg').hidden=true;
+document.addEventListener('keydown',e=>{
+  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='p'){e.preventDefault();if(STEP===1)go(2);else $('#bprint').click()}
+  else if(e.key==='Escape'){
+    if(!$('#numpanel').hidden)$('#numpanel').hidden=true;else if(STEP===2)go(1);
+  }
+});
+
+async function loadPrinters(){
+  const s=$('#printer');s.innerHTML='';
+  msg('Reading printers…');
+  let l;
+  try{l=await (await api('/api/printers')).json()}catch(e){msg('Error: '+e.message);return}
+  if(!Array.isArray(l)||!l.length){msg('No printer found on this PC.');return}
+  l.forEach(p=>s.append(new Option(`${p.name}  [${p.usb?'USB':p.port}]${p.default?' ★':''}`,p.name)));
+  if(PRN.printer&&[...s.options].some(o=>o.value===PRN.printer))s.value=PRN.printer;
+  s.onchange=loadCaps;loadCaps();
+}
+async function loadCaps(){
+  msg('Reading printer settings…');
+  const r=await api('/api/printer?name='+encodeURIComponent($('#printer').value));
+  CAPS=await r.json();
+  if(CAPS.error){msg('Error: '+CAPS.error);return}
+  msg('');
+  const P=$('#paper');P.innerHTML='';
+  CAPS.papers.forEach(p=>P.append(new Option(p.name+(p.custom?' (custom)':'')+(p.name===CAPS.defaults.paper?' – driver default':''),p.name)));
+  if(CAPS.defaults.paper)P.value=CAPS.defaults.paper;
+  const C=$('#color');C.innerHTML='';
+  if(CAPS.color){C.append(new Option('Color','color'));C.append(new Option('Black & White','mono'));C.value=CAPS.defaults.color?'color':'mono'}
+  else C.append(new Option('Black & White (printer has no color)','mono'));
+  $('#duprow').hidden=!CAPS.duplex;
+  if(CAPS.duplex)$('#duplex').value=CAPS.defaults.duplex;
+  applyPrn();
+  const dn={off:'one side',long:'two-sided long edge',short:'two-sided short edge'};
+  $('#dnote').textContent=`Driver default: ${CAPS.defaults.paper||'?'}, ${CAPS.defaults.color?'Color':'B&W'}${CAPS.duplex?', '+dn[CAPS.defaults.duplex]:''}`;
+  loadProfiles();
+  pvRender();
+}
+
+/* ---- profiles ---- */
+async function loadProfiles(selId){
+  const S=$('#profile');S.innerHTML='';S.append(new Option('None (normal way)',''));
+  try{
+    const l=await (await api('/api/profiles?printer='+encodeURIComponent($('#printer').value))).json();
+    l.forEach(p=>S.append(new Option(p.name,p.id)));
+  }catch{}
+  S.value=selId||'';profChange();
+}
+function profChange(){
+  const has=!!$('#profile').value;
+  $('#bdel').hidden=!has;
+  $('#duplex').disabled=has;
+  $('#pnote').textContent=has
+    ?'This profile controls the driver options (two-sided, paper type, quality…). Paper size, orientation, color and copies still follow the settings here.'
+    :'';
+}
+$('#profile').onchange=profChange;
+$('#bprof').onclick=async()=>{
+  if(!$('#printer').value)return;
+  const name=prompt('Name for this profile (e.g. Epson Glossy High, Toshiba 2-sided):');
+  if(!name||!name.trim())return;
+  msg('The printer settings window is opening. Choose the options there and press OK.');
+  try{
+    const r=await api('/api/profiles/new',{method:'POST',headers:JH,body:JSON.stringify({printer:$('#printer').value,name:name.trim()})});
+    const j=await r.json();
+    if(!r.ok){msg('Error: '+j.error);return}
+    pollProf(j.id);
+  }catch(e){msg('Error: '+e.message)}
+};
+async function pollProf(id){
+  const j=await (await api('/api/job/'+id)).json();
+  if(j.state==='run')setTimeout(()=>pollProf(id),800);
+  else if(j.state==='done'){msg('✓ Profile saved: '+j.profile.name);loadProfiles(j.profile.id)}
+  else if(j.state==='cancel')msg('Cancelled. Nothing was saved.');
+  else msg('Error: '+j.error);
+}
+$('#bdel').onclick=async()=>{
+  const v=$('#profile').value;
+  if(!v||!confirm('Delete this profile?'))return;
+  await api('/api/profiles/'+v+'?printer='+encodeURIComponent($('#printer').value),{method:'DELETE'});
+  loadProfiles();
+};
+
+/* ---- scaling ---- */
+const SC=[['fit','Fit to printable area'],['actual','Actual size (100%)'],['fill','Fill page (crop)'],['custom','Custom %']];
+const SCN={fit:'Whole page fitted inside the printable area. Nothing is cut off.',
+  actual:'Real size. Anything outside the printer\'s printable area is cut off.',
+  fill:'Page covers the whole printable area. The extra part is cropped.',
+  custom:'Percent of the real size (100% = actual size), always centered. Anything outside the printable area is cut off.'};
+SC.forEach(([v,t])=>$('#scale').append(new Option(t,v)));
+function setScale(v){
+  $('#scale').value=v;$('#scnote').textContent=SCN[v];
+  $('#pctbox').hidden=$('#pctr').hidden=v!=='custom';
+}
+function setPct(v){
+  v=Math.max(10,Math.min(400,Math.round(parseFloat(v)||100)));
+  $('#pct').value=v;$('#pctr').value=Math.min(300,v);return v;
+}
+$('#pct').onchange=()=>setPct($('#pct').value);
+$('#pctr').oninput=()=>setPct($('#pctr').value);
+$('#pctm').onclick=()=>{setPct((parseFloat($('#pct').value)||100)-5);pvRefresh()};
+$('#pctp').onclick=()=>{setPct((parseFloat($('#pct').value)||100)+5);pvRefresh()};
+setScale('fit');
+$('#scale').onchange=()=>setScale($('#scale').value);
+
+function orient(){
+  const v=$('#orient').value;if(v!=='auto')return v;
+  const s=selPages()[0];return s&&s.land?'landscape':'portrait';
+}
+function params(){
+  const pp=CAPS&&CAPS.papers?CAPS.papers.find(x=>x.name===$('#paper').value):null;
+  return new URLSearchParams({printer:$('#printer').value,paper:$('#paper').value,color:$('#color').value,
+    duplex:CAPS&&CAPS.duplex?$('#duplex').value:'off',orient:orient(),scale:$('#scale').value,pct:setPct($('#pct').value),
+    w:(pp&&pp.w)||210,h:(pp&&pp.h)||297}).toString()+numQS();
+}
+
+/* ---------------- step 2: live preview, scrolls like a book ---------------- */
+const dupOn=()=>CAPS&&CAPS.duplex&&!$('#profile').value&&$('#duplex').value!=='off';
+let pvT=null;
+function pvRefresh(){clearTimeout(pvT);pvT=setTimeout(pvRender,250)}
+// any change in the settings panel refreshes the preview
+['change','input'].forEach(ev=>$('#setp').addEventListener(ev,e=>{
+  if(STEP!==2||e.target.id==='printer'||e.target.id==='copies')return;
+  pvRefresh();
+}));
+function pvSheetW(){
+  const st=$('#pvstage'),sw=(st.clientWidth||600)-44,sh=(st.clientHeight||600)-70;
+  const ratio=orient()==='landscape'?0.707:1.414;
+  const per=dupOn()?(sw-14)/2:sw;
+  return Math.max(120,Math.min(per,sh/ratio))*PZ;
+}
+function pvNeedPw(){return Math.min(1800,Math.max(720,Math.ceil(pvSheetW()*(window.devicePixelRatio||1)/120)*120))}
+function pvRender(){
+  if(STEP!==2)return;
+  const stage=$('#pvstage');stage.innerHTML='';
+  if(!CAPS||CAPS.error)return;
+  const list=selPages();
+  if(!list.length){stage.append(el('div',{className:'empty mut',textContent:'No pages selected. Go back and tick the pages to print.'}));return}
+  PW=pvNeedPw();
+  const q=params()+'&pw='+PW,step=dupOn()?2:1,w=pvSheetW()+'px',n=list.length;
+  for(let i=0;i<n;i+=step){
+    const row=el('div',{className:'pvrow'});
+    list.slice(i,i+step).forEach((p,k)=>{
+      const im=el('img',{alt:'',loading:'lazy',src:`/api/preview?f=${p.f}&p=${p.p}&${q}`});
+      const cap=step===2?(k===0?'Front':'Back')+` · page ${i+k+1} of ${n}`:`Page ${i+1} of ${n}`;
+      const sh=el('div',{className:'pvsheet'},im,el('small',{className:'mut',textContent:cap}));
+      sh.style.width=w;row.append(sh);
+    });
+    stage.append(row);
+  }
+  pvInfo(q);
+}
+async function pvInfo(q){
+  try{
+    const a=await (await api('/api/area?'+q)).json();
+    $('#pvinfo').textContent=(a.driver?'From the printer driver: ':'Estimated (driver gave no area): ')+
+      `paper ${a.pw.toFixed(0)} × ${a.ph.toFixed(0)} mm, printable area ${a.aw.toFixed(0)} × ${a.ah.toFixed(0)} mm.`+
+      (dupOn()?' Two-sided: front and back are shown together.':'');
+  }catch{$('#pvinfo').textContent=''}
+}
+
+/* ---- zoom with Ctrl + wheel / keys ---- */
+window.addEventListener('wheel',e=>{
+  if(!e.ctrlKey)return;
+  e.preventDefault();zoomBy(e.deltaY<0?1.1:1/1.1);
+},{passive:false});
+document.addEventListener('keydown',e=>{
+  if(!e.ctrlKey)return;
+  const zin=e.key==='+'||e.key==='=',zout=e.key==='-'||e.key==='_',zero=e.key==='0';
+  if(!(zin||zout||zero))return;
+  e.preventDefault();
+  if(zero)zoomReset();else zoomBy(zin?1.1:1/1.1);
+});
+
+/* ---- print (status shows on this same page) ---- */
+$('#bprint').onclick=async()=>{
+  const s=selPages();if(!s.length)return toast('Tick at least one page to print');
+  if(!CAPS||CAPS.error)return toast('Select a printer first');
+  const copies=Math.max(1,Math.min(99,parseInt($('#copies').value)||1));
+  const body={printer:$('#printer').value,paper:$('#paper').value,color:$('#color').value,
+    duplex:CAPS.duplex?$('#duplex').value:'off',orient:orient(),copies,
+    profile:$('#profile').value||'',scale:$('#scale').value,pct:setPct($('#pct').value),
+    num:NUM,pages:s.map(p=>[p.f,p.p]),title:jobTitle(s)};
+  $('#bprint').disabled=true;
+  msg('Sending…');
+  try{
+    const r=await api('/api/print',{method:'POST',headers:JH,body:JSON.stringify(body)});
+    const j=await r.json();
+    if(!r.ok){msg('Error: '+j.error);$('#bprint').disabled=false;return}
+    poll(j.id);
+  }catch(e){msg('Error: '+e.message);$('#bprint').disabled=false}
+};
+async function poll(id){
+  let j;
+  try{j=await (await api('/api/job/'+id)).json()}catch(e){msg('Error: '+e.message);$('#bprint').disabled=false;return}
+  if(j.state==='run'){msg(`Printing ${j.done}/${j.total}…`);setTimeout(()=>poll(id),700)}
+  else if(j.state==='done'){msg('✓ Sent to printer');$('#bprint').disabled=false}
+  else{msg('Error: '+j.error);$('#bprint').disabled=false}
+}
+
+/* ---------------- start with windows ---------------- */
+async function initAuto(){
+  try{
+    const j=await (await api('/api/autostart')).json();
+    if(!j.available)return;
+    $('#autolbl').hidden=false;$('#auto').checked=j.on;
+  }catch{}
+}
+$('#auto').onchange=async()=>{
+  const on=$('#auto').checked;
+  try{
+    const r=await api('/api/autostart',{method:'POST',headers:JH,body:JSON.stringify({on})});
+    const j=await r.json();
+    if(!r.ok){$('#auto').checked=!on;toast(j.error||'Could not change it')}
+  }catch{$('#auto').checked=!on;toast('Could not change it')}
+};
+(async()=>{initAuto();await loadSettings();numNote();await refresh(true);setInterval(refresh,1200)})();
+</script>
+</body>
+</html>
