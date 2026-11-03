@@ -845,7 +845,7 @@ function pvRender(){
   const list=selPages();
   if(!list.length){stage.append(el('div',{className:'empty mut',textContent:'No pages selected. Go back and tick the pages to print.'}));return}
   PW=pvNeedPw();
-  if(TF.on){pvRenderT(list);return}
+  if(tfActive()){pvRenderT(list);return}
   const q=params()+'&pw='+PW,step=dupOn()?2:1,w=pvSheetW()+'px',n=list.length;
   for(let i=0;i<n;i+=step){
     const row=el('div',{className:'pvrow'});
@@ -890,7 +890,7 @@ $('#bprint').onclick=async()=>{
     duplex:CAPS.duplex?$('#duplex').value:'off',orient:orient(),copies,
     profile:$('#profile').value||'',scale:$('#scale').value,pct:setPct($('#pct').value),
     num:NUM,pages:s.map(p=>[p.f,p.p]),title:jobTitle(s)};
-  if(TF.on){   // free layout from the Transform tool
+  if(tfActive()){   // free layout from the Transform tool (kept even when the Transform button is switched off)
     const lay={},sh=tfSheets(s);
     body.pages=sh.map(p=>p.extra?[p.f,p.p,p.k]:[p.f,p.p]);
     for(const p of sh){
@@ -925,6 +925,7 @@ const LAY={},INFO={};   // LAY["file:page"]={items:[{cx,cy,w,h,rot,f,p}],touched
 let TFA=null,tfGen=0;
 let TFX=[],tfXn=0,TFCLIP=null;const TFDEL=new Set();   // TFX = extra blank pages, TFCLIP = copied pictures, TFDEL = pages removed here
 const kk=p=>p.k||key(p.f,p.p);
+const tfActive=()=>TF.on||TFX.length>0||TFDEL.size>0||Object.values(LAY).some(l=>l&&l.touched);   // changes made in Transform stay in use after it is switched off
 function tfSheets(list){   // the pages in order, with the added blank pages in their places
   const out=[],add=after=>TFX.filter(x=>x.after===after).forEach(x=>{out.push(x);add(x.k)});
   add(null);list.forEach(p=>{out.push(p);add(key(p.f,p.p))});
@@ -964,7 +965,7 @@ async function pvRenderT(list){
     const k=key(p.f,p.p);
     if(!INFO[k]){try{const j=await (await api(`/api/pageinfo?f=${p.f}&p=${p.p}`)).json();if(j.w)INFO[k]=j}catch{}}
   }));
-  if(gen!==tfGen||STEP!==2||!TF.on)return;
+  if(gen!==tfGen||STEP!==2||!tfActive())return;
   TFA=a;stage.innerHTML='';
   list.forEach(p=>{if(p.extra)return;const k=key(p.f,p.p);
     if(INFO[k]&&(!LAY[k]||!LAY[k].touched))LAY[k]={items:[defItem(INFO[k],a,p.f,p.p)],touched:false}});
@@ -977,13 +978,14 @@ async function pvRenderT(list){
       const body=LAY[k]?tfSheet(p,a,q,i+k2):el('div',{className:'mut',textContent:'Could not read this page'});
       const xb=el('button',{className:'tbtn tfxp',textContent:'🗑 Delete page',title:'Delete this whole page with everything on it'});
       xb.onclick=e=>{e.stopPropagation();tfDeletePage(k)};
-      const sh=el('div',{className:'pvsheet'},body,el('div',{className:'tfcap'},el('small',{className:'mut',textContent:cap}),xb));
+      const capEl=el('div',{className:'tfcap'},el('small',{className:'mut',textContent:cap}));if(TF.on)capEl.append(xb);
+      const sh=el('div',{className:'pvsheet'},body,capEl);
       sh.style.width=w;row.append(sh);
     });
     stage.append(row);
-    stage.append(plusBtn(kk(list[Math.min(i+step,n)-1])));
+    if(TF.on)stage.append(plusBtn(kk(list[Math.min(i+step,n)-1])));
   }
-  stage.prepend(plusBtn(null));
+  if(TF.on)stage.prepend(plusBtn(null));
   if(TFSCROLL!==null){stage.scrollTop=TFSCROLL;TFSCROLL=null}
   if(!tfItems().length)TF.sel=null;
   tfSync();pvInfo(q);
@@ -1013,13 +1015,14 @@ function tfBuild(box){
     if(mono)im.style.filter='grayscale(1)';
     place(im,it);box._clip.append(im);box._vis.push(im);
   });
-  if(!L.items.length)box._clip.append(el('div',{className:'tfempty',textContent:'Blank page · drag a picture here, press Ctrl+V, or use Add picture'}));
+  if(TF.on&&!L.items.length)box._clip.append(el('div',{className:'tfempty',textContent:'Blank page · drag a picture here, press Ctrl+V, or use Add picture'}));
   tfHits(box);
 }
 const HANDLES=[[-1,-1,'nwse'],[0,-1,'ns'],[1,-1,'nesw'],[1,0,'ew'],[1,1,'nwse'],[0,1,'ns'],[-1,1,'nesw'],[-1,0,'ew']];
 function tfHits(box){
   const k=box._k,L=LAY[k],single=TF.sel&&TF.sel.k===k&&TF.sel.idx.length===1;
   box._ui.innerHTML='';box._hit=[];
+  if(!TF.on)return;
   L.items.forEach((it,i)=>{
     const h=el('div',{className:'tfh'+(isSel(k,i)?' sel':'')});
     place(h,it);
@@ -1256,7 +1259,7 @@ $('#tfResetAll').onclick=()=>{tfSnap();TFX=[];Object.keys(LAY).forEach(k=>delete
 $('#tfPage').onclick=tfAddPage;
 $('#btf').onclick=()=>{
   TF.on=!TF.on;$('#btf').classList.toggle('on',TF.on);
-  if(!TF.on)TF.sel=null;
+  if(!TF.on){TF.sel=null;if(tfActive())toast('Your Transform changes are kept for printing.\nTurn Transform on and press Reset all to undo them.')}
   tfSync();pvRender();
 };
 $('#pvstage').addEventListener('pointerdown',e=>{
