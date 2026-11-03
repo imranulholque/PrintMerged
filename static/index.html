@@ -100,6 +100,8 @@ body.s1 .s2only,body.s2 .s1only{display:none!important}
 .tfclip{overflow:hidden}
 .pvsheet .tfclip img.tfi{position:absolute;display:block;max-width:none;min-height:0;border-radius:0;box-shadow:none;background:none;pointer-events:none}
 .tfh{position:absolute;cursor:move}
+.tfbox.tfdrop::after{content:'';position:absolute;inset:0;outline:3px solid var(--pri);outline-offset:-3px;background:rgba(37,99,235,.08);pointer-events:none;z-index:5}
+.tfempty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:12px;color:#9aa0aa;font-size:13px;pointer-events:none}
 .tfh:hover{outline:1px dashed var(--pri)}
 .tfh.sel{outline:2px solid var(--pri)}
 .tfh .hd{position:absolute;width:11px;height:11px;margin:-6px 0 0 -6px;background:#fff;border:2px solid var(--pri);border-radius:2px;z-index:2}
@@ -287,9 +289,10 @@ body.s1 .s2only,body.s2 .s1only{display:none!important}
       <div class="tfrow">
         <button id="tfAdd" class="tbtn p" title="Add another picture to this page (you can also drop or paste it onto the sheet)">＋ Add picture</button>
         <button id="tfPaste" class="tbtn" title="Paste a copied picture onto this page (Ctrl+V)" aria-label="Paste">📋</button>
+        <button id="tfPage" class="tbtn" title="Add a new blank page after the current one">＋ Add page</button>
         <span class="tsep"></span>
         <button id="tfAll" class="tbtn" title="Select every picture on this page (Ctrl+A)">☑ All</button>
-        <button id="tfDup" class="tbtn" title="Copy the selected pictures (Ctrl+D, or hold Alt and drag)">⧉ Copy</button>
+        <button id="tfDup" class="tbtn" title="Duplicate the selected pictures on this page (Ctrl+D, or hold Alt and drag). Ctrl+C / Ctrl+X / Ctrl+V copy, cut and paste between pages.">⧉ Copy</button>
         <button id="tfRot90" class="tbtn" title="Rotate 90° clockwise (Shift+R = back)">⟳ Rotate 90° <kbd>R</kbd></button>
         <button id="tfCenter" class="tbtn" title="Center on the page">⌖ Center</button>
         <button id="tfDel" class="tbtn dng" title="Delete the selected pictures (Delete key)">🗑</button>
@@ -328,9 +331,12 @@ body.s1 .s2only,body.s2 .s1only{display:none!important}
         <div><b>Corner handles</b><span>resize · Shift = free shape</span></div>
         <div><b>R / Shift + R</b><span>rotate 90° clockwise / back</span></div>
         <div><b>Arrow keys</b><span>nudge 1 mm · Shift = 10 mm</span></div>
-        <div><b>Ctrl + D</b><span>copy</span></div>
-        <div><b>Delete</b><span>remove</span></div>
-        <div><b>Drop / Ctrl + V</b><span>add another picture to the page</span></div>
+        <div><b>Drag to another page</b><span>move it there (Alt + drag = copy there)</span></div>
+        <div><b>Ctrl + C / Ctrl + X</b><span>copy / cut the selected pictures</span></div>
+        <div><b>Ctrl + V</b><span>paste on the page under the mouse</span></div>
+        <div><b>Ctrl + D</b><span>duplicate on the same page</span></div>
+        <div><b>Delete</b><span>remove (an empty page disappears)</span></div>
+        <div><b>Drop a file</b><span>add another picture to the page</span></div>
         <div><b>Esc</b><span>deselect</span></div>
       </div>
     </div>
@@ -590,7 +596,9 @@ document.addEventListener('paste',e=>{
   const t=e.target;if(t&&/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)&&t.type!=='checkbox')return;
   e.preventDefault();
   const fl=e.clipboardData&&e.clipboardData.files;
-  if(fl&&fl.length)uploadFiles(fl);else pasteClipboard();
+  if(fl&&fl.length)uploadFiles(fl);
+  else if(TF.on&&STEP===2&&TFCLIP)tfPasteInternal(tfTargetBox(null,true));
+  else pasteClipboard();
 });
 
 /* ---------------- page numbers ---------------- */
@@ -871,11 +879,12 @@ $('#bprint').onclick=async()=>{
     profile:$('#profile').value||'',scale:$('#scale').value,pct:setPct($('#pct').value),
     num:NUM,pages:s.map(p=>[p.f,p.p]),title:jobTitle(s)};
   if(TF.on){   // free layout from the Transform tool
-    const lay={};
-    for(const p of s){
-      const L=LAY[key(p.f,p.p)];
+    const lay={},sh=tfSheets(s);
+    body.pages=sh.map(p=>p.extra?[p.f,p.p,p.k]:[p.f,p.p]);
+    for(const p of sh){
+      const L=LAY[kk(p)];
       if(!L)return toast('The layout is still loading. Try again in a moment.');
-      lay[key(p.f,p.p)]=L.items.map(i=>({cx:i.cx,cy:i.cy,w:i.w,h:i.h,rot:i.rot,f:i.f,p:i.p}));
+      lay[kk(p)]=L.items.map(i=>({cx:i.cx,cy:i.cy,w:i.w,h:i.h,rot:i.rot,f:i.f,p:i.p}));
     }
     body.layout=lay;
   }
@@ -902,15 +911,24 @@ const TF={on:false,sel:null,unit:'in',lock:true};   // sel={k:"file:page", idx:[
 try{TF.unit=localStorage.getItem('tfUnit')||'in'}catch{}
 const LAY={},INFO={};   // LAY["file:page"]={items:[{cx,cy,w,h,rot,f,p}],touched}  (mm from the printable area's top-left)
 let TFA=null,tfGen=0;
+let TFX=[],tfXn=0,TFCLIP=null;const TFDEL=new Set();   // TFX = extra blank pages, TFCLIP = copied pictures, TFDEL = pages removed here
+const kk=p=>p.k||key(p.f,p.p);
+function tfSheets(list){   // the pages in order, with the added blank pages in their places
+  const out=[],add=after=>TFX.filter(x=>x.after===after).forEach(x=>{out.push(x);add(x.k)});
+  add(null);list.forEach(p=>{out.push(p);add(key(p.f,p.p))});
+  TFX.forEach(x=>{if(!out.includes(x))out.push(x)});
+  return out;
+}
 const UN={in:25.4,cm:10,mm:1};
 const isSel=(k,i)=>!!TF.sel&&TF.sel.k===k&&TF.sel.idx.includes(i);
 function tfSetSel(k,idx,main){TF.sel=idx.length?{k,idx,main:main===undefined?idx[idx.length-1]:main}:null}
 const tfItems=()=>{const s=TF.sel;return s&&LAY[s.k]?s.idx.map(i=>LAY[s.k].items[i]).filter(Boolean):[]};
 const tfMain=()=>{const s=TF.sel;return (s&&LAY[s.k]&&LAY[s.k].items[s.main])||null};
 const tfBoxOf=k=>[...document.querySelectorAll('.tfbox')].find(b=>b._k===k);
-function tfTargetBox(ev){
-  if(ev){const t=document.elementFromPoint(ev.clientX,ev.clientY);const b=t&&t.closest&&t.closest('.tfbox');if(b)return b}
-  return (TF.sel&&tfBoxOf(TF.sel.k))||document.querySelector('.tfbox');
+function tfBoxAt(ev){const t=document.elementFromPoint(ev.clientX,ev.clientY);return t&&t.closest?t.closest('.tfbox'):null}
+function tfTargetBox(ev,hover){
+  if(ev){const b=tfBoxAt(ev);if(b)return b}
+  return (hover&&TF.hov&&tfBoxOf(TF.hov))||(TF.sel&&tfBoxOf(TF.sel.k))||(TF.cur&&tfBoxOf(TF.cur))||document.querySelector('.tfbox');
 }
 function defItem(inf,a,f,p){
   const m=$('#scale').value;let s;
@@ -927,6 +945,7 @@ function place(e,it){
   e.style.transform=`rotate(${it.rot}deg)`;
 }
 async function pvRenderT(list){
+  list=tfSheets(list);
   const gen=++tfGen,stage=$('#pvstage'),q=params()+'&pw='+PW;
   let a;try{a=await (await api('/api/area?'+q)).json()}catch{return}
   await Promise.all(list.map(async p=>{
@@ -935,13 +954,13 @@ async function pvRenderT(list){
   }));
   if(gen!==tfGen||STEP!==2||!TF.on)return;
   TFA=a;stage.innerHTML='';
-  list.forEach(p=>{const k=key(p.f,p.p);
+  list.forEach(p=>{if(p.extra)return;const k=key(p.f,p.p);
     if(INFO[k]&&(!LAY[k]||!LAY[k].touched))LAY[k]={items:[defItem(INFO[k],a,p.f,p.p)],touched:false}});
   const step=dupOn()?2:1,w=pvSheetW()+'px',n=list.length;
   for(let i=0;i<n;i+=step){
     const row=el('div',{className:'pvrow'});
     list.slice(i,i+step).forEach((p,k2)=>{
-      const k=key(p.f,p.p);
+      const k=kk(p);
       const cap=step===2?(k2===0?'Front':'Back')+` · page ${i+k2+1} of ${n}`:`Page ${i+1} of ${n}`;
       const body=LAY[k]?tfSheet(p,a,q):el('div',{className:'mut',textContent:'Could not read this page'});
       const sh=el('div',{className:'pvsheet'},body,el('small',{className:'mut',textContent:cap}));
@@ -953,12 +972,14 @@ async function pvRenderT(list){
   tfSync();pvInfo(q);
 }
 function tfSheet(p,a,q){
-  const k=key(p.f,p.p),box=el('div',{className:'tfbox'});
+  const k=kk(p),box=el('div',{className:'tfbox'});
   box._k=k;box.style.aspectRatio=`${a.pw} / ${a.ph}`;
-  const bg=el('img',{className:'tfbg',alt:'',draggable:false,src:`/api/preview?f=${p.f}&p=${p.p}&${q}&blank=1`});
+  const bg=el('img',{className:'tfbg',alt:'',draggable:false,src:`/api/preview?f=${p.f}&p=${p.p}&${p.extra?'num=0&':''}${q}&blank=1`});
   const clip=el('div',{className:'tfclip'}),ui=el('div',{className:'tfui'});
   [clip,ui].forEach(d=>Object.assign(d.style,{left:a.ox/a.pw*100+'%',top:a.oy/a.ph*100+'%',width:a.aw/a.pw*100+'%',height:a.ah/a.ph*100+'%'}));
   box._clip=clip;box._ui=ui;box.append(bg,clip,ui);
+  box.addEventListener('pointerenter',()=>{TF.hov=k});
+  box.addEventListener('pointerdown',()=>{TF.cur=k},true);
   box.addEventListener('pointerdown',e=>{if(e.target.closest('.tfh')||e.ctrlKey||e.shiftKey)return;TF.sel=null;tfSelChanged()});
   tfBuild(box);return box;
 }
@@ -970,6 +991,7 @@ function tfBuild(box){
     if(mono)im.style.filter='grayscale(1)';
     place(im,it);box._clip.append(im);box._vis.push(im);
   });
+  if(!L.items.length)box._clip.append(el('div',{className:'tfempty',textContent:'Blank page · drag a picture here, press Ctrl+V, or use Add picture'}));
   tfHits(box);
 }
 const HANDLES=[[-1,-1,'nwse'],[0,-1,'ns'],[1,-1,'nesw'],[1,0,'ew'],[1,1,'nwse'],[0,1,'ns'],[-1,1,'nesw'],[-1,0,'ew']];
@@ -1035,13 +1057,70 @@ function tfDrag(e,box,idx,mode,hd,onClick){
       it.w=w;it.h=h;it.cx=o.cx+ex*cs-ey*sn;it.cy=o.cy+ex*sn+ey*cs;
     }
     L.touched=true;tfPlaceAll(box);tfSync();
+    if(mode==='move'){
+      document.querySelectorAll('.tfdrop').forEach(b=>b.classList.remove('tfdrop'));
+      const tb=tfBoxAt(ev);if(tb&&tb!==box)tb.classList.add('tfdrop');
+      const st=$('#pvstage').getBoundingClientRect();   // scroll when near the top / bottom edge
+      if(ev.clientY<st.top+40)$('#pvstage').scrollTop-=18;else if(ev.clientY>st.bottom-40)$('#pvstage').scrollTop+=18;
+    }
   };
-  const up=()=>{
-    window.removeEventListener('pointermove',mv);window.removeEventListener('pointerup',up);window.removeEventListener('pointercancel',up);
+  const end=(ev,cancel)=>{
+    window.removeEventListener('pointermove',mv);window.removeEventListener('pointerup',up);window.removeEventListener('pointercancel',cn);
+    document.querySelectorAll('.tfdrop').forEach(b=>b.classList.remove('tfdrop'));
+    if(moved&&mode==='move'&&!cancel){
+      const tb=tfBoxAt(ev);
+      if(tb&&tb!==box&&LAY[tb._k]){tfMoveAcross(box,tb,idx,os,r,ev.clientX-x0,ev.clientY-y0,kx);return}
+    }
     if(!moved&&onClick)onClick();
   };
-  window.addEventListener('pointermove',mv);window.addEventListener('pointerup',up);window.addEventListener('pointercancel',up);
+  const up=ev=>end(ev,false),cn=ev=>end(ev,true);
+  window.addEventListener('pointermove',mv);window.addEventListener('pointerup',up);window.addEventListener('pointercancel',cn);
 }
+
+/* ---- move pictures to another page (drag), copy / cut / paste, add and remove pages ---- */
+function tfMoveAcross(src,dst,idx,os,r0,dx,dy,kx){
+  const LS=LAY[src._k],LD=LAY[dst._k],a=TFA,rd=dst._ui.getBoundingClientRect();
+  const moved=idx.map((i,t)=>({...os[t],
+    cx:Math.max(0,Math.min(a.aw,(r0.left+os[t].cx*kx+dx-rd.left)/kx)),
+    cy:Math.max(0,Math.min(a.ah,(r0.top+os[t].cy*kx+dy-rd.top)/kx))}));
+  const rm=new Set(idx);LS.items=LS.items.filter((_,i)=>!rm.has(i));
+  const n=LD.items.length;LD.items.push(...moved);LS.touched=LD.touched=true;
+  tfSetSel(dst._k,moved.map((_,t)=>n+t));TF.cur=dst._k;
+  if(!LS.items.length)tfDropPage(src._k);
+  else{tfBuild(src);tfBuild(dst);tfSelChanged()}
+}
+function tfDropPage(k){   // a page with no pictures left goes away
+  const sheets=tfSheets(selPages());
+  if(sheets.length<=1){toast('This is the only page, so it stays blank. Use Add picture or Add page.');tfRebuild(k);return}
+  const i=sheets.findIndex(s=>kk(s)===k),prev=i>0?kk(sheets[i-1]):null;
+  TFX.forEach(x=>{if(x.after===k)x.after=prev});
+  const xi=TFX.findIndex(x=>x.k===k);
+  if(xi>=0)TFX.splice(xi,1);else{setSel(k,false);TFDEL.add(k);updateCount()}
+  delete LAY[k];if(TF.sel&&TF.sel.k===k)TF.sel=null;if(TF.cur===k)TF.cur=null;if(TF.hov===k)TF.hov=null;
+  pvRender();
+}
+function tfCopy(){
+  const its=tfItems();if(!its.length)return false;
+  TFCLIP={k:TF.sel.k,n:0,items:its.map(({cx,cy,w,h,rot,f,p})=>({cx,cy,w,h,rot,f,p}))};
+  toast(`Copied ${its.length} picture${its.length>1?'s':''}. Press Ctrl+V on any page.`);return true;
+}
+function tfCut(){if(tfCopy())tfDelete()}
+function tfPasteInternal(box){
+  if(!TFCLIP||!box)return;
+  const L=LAY[box._k];if(!L)return;
+  const off=TFCLIP.k===box._k?5*(++TFCLIP.n):0,n=L.items.length;
+  TFCLIP.items.forEach(it=>L.items.push({...it,cx:it.cx+off,cy:it.cy+off}));
+  L.touched=true;TF.cur=box._k;tfSetSel(box._k,TFCLIP.items.map((_,t)=>n+t));tfRebuild(box._k);
+}
+function tfAddPage(){
+  const sheets=tfSheets(selPages());if(!sheets.length)return;
+  const b=tfTargetBox(null),after=b?b._k:kk(sheets[sheets.length-1]),t=sheets[0];
+  const x={k:'x'+(++tfXn),after,f:t.f,p:t.p,name:t.name,extra:true};
+  TFX.push(x);LAY[x.k]={items:[],touched:true};TF.sel=null;TF.cur=x.k;
+  pvRender();
+  setTimeout(()=>{const nb=tfBoxOf(x.k);if(nb)nb.scrollIntoView({block:'center',behavior:'smooth'})},500);
+}
+window.addEventListener('blur',()=>{TFCLIP=null});   // after using another program, Ctrl+V means that program's clipboard
 
 /* ---- dock: buttons and number boxes ---- */
 function tfSync(){
@@ -1097,8 +1176,8 @@ function tfDuplicate(){
 function tfDelete(){
   const s=TF.sel;if(!s||!LAY[s.k])return;
   const L=LAY[s.k],rm=new Set(s.idx);
-  if(L.items.length-rm.size<1)return toast('A page needs at least one picture. Use Reset page to start over.');
-  L.items=L.items.filter((_,i)=>!rm.has(i));L.touched=true;TF.sel=null;tfRebuild(s.k);
+  L.items=L.items.filter((_,i)=>!rm.has(i));L.touched=true;TF.sel=null;
+  if(!L.items.length)tfDropPage(s.k);else tfRebuild(s.k);
 }
 function tfSelectAll(){
   const b=tfTargetBox(null);if(!b)return;
@@ -1113,8 +1192,9 @@ function tfCenter(){
 }
 $('#tfDup').onclick=tfDuplicate;$('#tfDel').onclick=tfDelete;$('#tfAll').onclick=tfSelectAll;
 $('#tfRot90').onclick=()=>tfRotate(90);$('#tfCenter').onclick=tfCenter;
-$('#tfReset').onclick=()=>{const b=tfTargetBox(null);if(!b)return;delete LAY[b._k];TF.sel=null;pvRender()};
-$('#tfResetAll').onclick=()=>{selPages().forEach(p=>delete LAY[key(p.f,p.p)]);TF.sel=null;pvRender()};
+$('#tfReset').onclick=()=>{const b=tfTargetBox(null);if(!b)return;if(TFX.some(x=>x.k===b._k))LAY[b._k]={items:[],touched:true};else delete LAY[b._k];TF.sel=null;pvRender()};
+$('#tfResetAll').onclick=()=>{TFX=[];Object.keys(LAY).forEach(k=>delete LAY[k]);TFDEL.forEach(k=>setSel(k,true));TFDEL.clear();updateCount();TF.sel=null;pvRender()};
+$('#tfPage').onclick=tfAddPage;
 $('#btf').onclick=()=>{
   TF.on=!TF.on;$('#btf').classList.toggle('on',TF.on);
   if(!TF.on)TF.sel=null;
@@ -1165,7 +1245,7 @@ async function tfFromServer(url){
     if(!(j.files&&j.files.length)&&j.errors&&j.errors.length)toast(j.errors.join('\n'));
   }catch(e){toast('Could not add the picture')}
 }
-const tfPaste=()=>tfFromServer('/api/xpaste');
+const tfPaste=()=>TFCLIP?tfPasteInternal(tfTargetBox(null)):tfFromServer('/api/xpaste');
 $('#tfAdd').onclick=()=>tfFromServer('/api/xpick');
 $('#tfPaste').onclick=tfPaste;
 
@@ -1175,6 +1255,8 @@ document.addEventListener('keydown',e=>{
   const k=e.key.toLowerCase();
   if(e.ctrlKey&&k==='a'){e.preventDefault();tfSelectAll();return}
   if(!tfItems().length)return;
+  if(e.ctrlKey&&k==='c'){e.preventDefault();tfCopy();return}
+  if(e.ctrlKey&&k==='x'){e.preventDefault();tfCut();return}
   if(k==='delete'||k==='backspace'){e.preventDefault();tfDelete()}
   else if(e.ctrlKey&&k==='d'){e.preventDefault();tfDuplicate()}
   else if(!e.ctrlKey&&!e.altKey&&k==='r'){e.preventDefault();tfRotate(e.shiftKey?-90:90)}
