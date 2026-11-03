@@ -101,6 +101,11 @@ body.s1 .s2only,body.s2 .s1only{display:none!important}
 .pvsheet .tfclip img.tfi{position:absolute;display:block;max-width:none;min-height:0;border-radius:0;box-shadow:none;background:none;pointer-events:none}
 .tfh{position:absolute;cursor:move}
 .tfdragging .tfh{pointer-events:none!important}
+.tfcap{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:4px}
+.tfcap small{margin:0!important}
+.tfcap .tfxp{padding:2px 9px;border-radius:8px;font-size:12px;color:#dc2626;line-height:1.4}
+.tfplus{display:flex;justify-content:center;margin:2px 0}
+.tfplus button{width:34px;height:34px;border-radius:50%;font-size:20px;line-height:1;padding:0;display:flex;align-items:center;justify-content:center;color:var(--pri)}
 .tfbox.tfsrc{z-index:20}
 .tfbox.tfdrop::after{content:'';position:absolute;inset:0;outline:3px solid var(--pri);outline-offset:-3px;background:rgba(37,99,235,.08);pointer-events:none;z-index:5}
 .tfempty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:12px;color:#9aa0aa;font-size:13px;pointer-events:none}
@@ -970,13 +975,23 @@ async function pvRenderT(list){
       const k=kk(p);
       const cap=step===2?(k2===0?'Front':'Back')+` · page ${i+k2+1} of ${n}`:`Page ${i+1} of ${n}`;
       const body=LAY[k]?tfSheet(p,a,q):el('div',{className:'mut',textContent:'Could not read this page'});
-      const sh=el('div',{className:'pvsheet'},body,el('small',{className:'mut',textContent:cap}));
+      const xb=el('button',{className:'tbtn tfxp',textContent:'🗑 Delete page',title:'Delete this whole page with everything on it'});
+      xb.onclick=e=>{e.stopPropagation();tfDeletePage(k)};
+      const sh=el('div',{className:'pvsheet'},body,el('div',{className:'tfcap'},el('small',{className:'mut',textContent:cap}),xb));
       sh.style.width=w;row.append(sh);
     });
     stage.append(row);
+    stage.append(plusBtn(kk(list[Math.min(i+step,n)-1])));
   }
+  stage.prepend(plusBtn(null));
+  if(TFSCROLL!==null){stage.scrollTop=TFSCROLL;TFSCROLL=null}
   if(!tfItems().length)TF.sel=null;
   tfSync();pvInfo(q);
+}
+function plusBtn(after){
+  const b=el('button',{className:'tbtn',textContent:'＋',title:'Add a blank white page here'});
+  b.onclick=e=>{e.stopPropagation();tfInsertPage(after)};
+  return el('div',{className:'tfplus'},b);
 }
 function tfSheet(p,a,q){
   const k=kk(p),box=el('div',{className:'tfbox'});
@@ -1103,6 +1118,13 @@ function tfMoveAcross(src,dst,idx,os,r0,dx,dy,kx){
   if(!LS.items.length)tfDropPage(src._k);
   else{tfBuild(src);tfBuild(dst);tfSelChanged()}
 }
+let TFSCROLL=null;
+function tfDeletePage(k){   // remove the whole page together with everything on it
+  tfSnap();TF.sel=null;
+  const sheets=tfSheets(selPages());
+  if(sheets.length<=1){const L=LAY[k];if(L){L.items=[];L.touched=true}toast('This is the only page, so it stays as a blank page.');tfRebuild(k);return}
+  TFSCROLL=$('#pvstage').scrollTop;tfDropPage(k);
+}
 function tfDropPage(k){   // a page with no pictures left goes away
   const sheets=tfSheets(selPages());
   if(sheets.length<=1){toast('This is the only page, so it stays blank. Use Add picture or Add page.');tfRebuild(k);return}
@@ -1127,8 +1149,12 @@ function tfPasteInternal(box){
   L.touched=true;TF.cur=box._k;tfSetSel(box._k,TFCLIP.items.map((_,t)=>n+t));tfRebuild(box._k);
 }
 function tfAddPage(){
+  const sheets=tfSheets(selPages());if(!sheets.length)return;
+  const b=tfTargetBox(null);tfInsertPage(b?b._k:kk(sheets[sheets.length-1]));
+}
+function tfInsertPage(after){   // a blank white page after the page called "after" (null = at the very start)
   const sheets=tfSheets(selPages());if(!sheets.length)return;tfSnap();
-  const b=tfTargetBox(null),after=b?b._k:kk(sheets[sheets.length-1]),t=sheets[0];
+  const t=sheets[0];
   const x={k:'x'+(++tfXn),after,f:t.f,p:t.p,name:t.name,extra:true};
   TFX.push(x);LAY[x.k]={items:[],touched:true};TF.sel=null;TF.cur=x.k;
   pvRender();
