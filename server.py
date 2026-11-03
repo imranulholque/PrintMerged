@@ -645,7 +645,7 @@ def compose(f, idx, W, H, mono, rotate=True, mode="fit", ppmm=None, pct=100.0):
 def sheet(f, idx, W, H, mono, mode="fit", ppmm=None, pct=100.0, num=None, rotate=True, items=None):
     """One printed sheet: the page, with the page number printed directly on it.
     items = free layout from the Transform tool (None / empty = the normal way)."""
-    if items and ppmm:
+    if items is not None and ppmm:
         canvas = compose_items(W, H, mono, ppmm, items)
     else:
         canvas = compose(f, idx, W, H, mono, rotate, mode, ppmm, pct)
@@ -1006,7 +1006,7 @@ def profiles_delete(pid):
 def do_print():
     d = request.get_json(silent=True) or {}
     try:
-        pages = [(FILES[f], int(p)) for f, p in d["pages"]]
+        pages = [(FILES[x[0]], int(x[1]), (str(x[2]) if len(x) > 2 else None)) for x in d["pages"]]   # 3rd = an added blank page
     except Exception:
         return jsonify(error="Files not found. Add them again."), 400
     if not pages:
@@ -1028,6 +1028,13 @@ def do_print():
              "nsize": nd.get("size"), "nstart": nd.get("start"),
              "nmargin": nd.get("margin"), "nbold": "1" if nd.get("bold") else "0"}
 
+    def page_items(i):
+        f, p, vk = pages[i]
+        lk = vk or f'{f["id"]}:{p}'
+        if lk not in lay:
+            return [] if vk else None
+        return clean_items(lay[lk], (f, p))   # an empty list = a blank page
+
     def run():
         try:
             area_mm = get_area({"printer": d["printer"], "paper": d.get("paper"),
@@ -1036,9 +1043,8 @@ def do_print():
             printing.print_job(
                 d["printer"], d.get("paper"), color, d.get("duplex", "off"), orient, copies, len(pages),
                 lambda i, W, H, m: sheet(pages[i][0], pages[i][1], W, H, m, mode, W / area_mm, pct,
-                                         numspec(nargs, pages[i][0]["id"], pages[i][1]),
-                                         items=clean_items(lay.get(f'{pages[i][0]["id"]}:{pages[i][1]}'),
-                                                           (pages[i][0], pages[i][1]))),
+                                         None if pages[i][2] else numspec(nargs, pages[i][0]["id"], pages[i][1]),
+                                         items=page_items(i)),
                 lambda done, total: JOBS[jid].update(done=done, total=total),
                 d.get("title", "PC Print"), profile=profile)
             JOBS[jid]["state"] = "done"
