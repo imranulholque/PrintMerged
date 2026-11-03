@@ -529,7 +529,12 @@ def numspec(args, fid, p):
     except Exception:
         margin = 8.0
     bold = str(args.get("nbold")) in ("1", "true", "True")
-    n = gnum(fid, p)   # position in the whole document, so one file keeps its serial number
+    try:
+        n = int(args["nn"]) if args.get("nn") else None   # Transform: serial number of the sheet in the printed list
+    except Exception:
+        n = None
+    if n is None:
+        n = gnum(fid, p)   # position in the whole document, so one file keeps its serial number
     if n is None:
         return None
     return {"text": str(start - 1 + n), "pos": pos, "align": align, "size": size,
@@ -1043,7 +1048,7 @@ def do_print():
             printing.print_job(
                 d["printer"], d.get("paper"), color, d.get("duplex", "off"), orient, copies, len(pages),
                 lambda i, W, H, m: sheet(pages[i][0], pages[i][1], W, H, m, mode, W / area_mm, pct,
-                                         None if pages[i][2] else numspec(nargs, pages[i][0]["id"], pages[i][1]),
+                                         numspec({**nargs, "nn": i + 1} if lay else nargs, pages[i][0]["id"], pages[i][1]),
                                          items=page_items(i)),
                 lambda done, total: JOBS[jid].update(done=done, total=total),
                 d.get("title", "PC Print"), profile=profile)
