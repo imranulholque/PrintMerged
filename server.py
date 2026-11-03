@@ -49,7 +49,7 @@ LOCAL = ("127.0.0.1", "::1")
 PH = {"ok": False, "port": 0, "fails": 0, "until": 0}
 PH_FILE = os.path.join(CFG_DIR, "phone.json")
 SREV = {"n": 0}
-LOCAL_ONLY = ("/api/add", "/api/pick", "/api/paste", "/api/autostart", "/api/phone/")
+LOCAL_ONLY = ("/api/add", "/api/pick", "/api/paste", "/api/autostart", "/api/phone/", "/api/x")
 
 
 def ph_cfg():
@@ -199,10 +199,10 @@ def register(paths, sort=True):
             BATCH["t"] = now
         for p in paths:
             p = os.path.abspath(p)
-            if any(f["path"] == p for f in FILES.values()):
+            if any(FILES[i]["path"] == p for i in ORDER if i in FILES):
                 continue
-            try:
-                fid = open_file(p)
+            try:   # a picture used earlier by the Transform tool is known already
+                fid = next((i for i, x in FILES.items() if x["path"] == p), None) or open_file(p)
             except Exception as e:
                 errors.append(f"{os.path.basename(p)}: {e}")
                 continue
@@ -353,6 +353,61 @@ def paste():
         added, errors = register([path], sort=True)
         return jsonify(added=added, errors=errors)
     return jsonify(added=0, errors=["The clipboard has no file or picture"])
+
+
+# ------------------------- extra pictures for the Transform tool (not added to the page list)
+def register_extra(paths):
+    """Pictures dropped / pasted / chosen onto a sheet. The server knows them (so they can be
+    drawn and printed) but they are NOT added to the list of pages."""
+    out, errors = [], []
+    with SLOCK:
+        for p in paths:
+            p = os.path.abspath(p)
+            fid = next((i for i, x in FILES.items() if x["path"] == p), None)
+            try:
+                if fid is None:
+                    fid = open_file(p)
+                out.append(pub(FILES[fid]))
+            except Exception as e:
+                errors.append(f"{os.path.basename(p)}: {e}")
+    return {"files": out, "errors": errors}
+
+
+@app.post("/api/xupload")
+def xupload():
+    paths = [save_upload(u) for u in request.files.getlist("file")]
+    if not paths:
+        return jsonify(files=[], errors=["No file received"])
+    return jsonify(**register_extra(paths))
+
+
+@app.post("/api/xpaste")
+def xpaste():
+    try:
+        data = ImageGrab.grabclipboard()
+    except Exception as e:
+        return jsonify(files=[], errors=[f"Cannot read the clipboard: {e}"])
+    if isinstance(data, list):
+        return jsonify(**register_extra([p for p in data if os.path.isfile(p)]))
+    if data is not None:
+        _UP["n"] += 1
+        d = os.path.join(upload_dir(), uuid.uuid4().hex[:8])
+        os.makedirs(d, exist_ok=True)
+        path = os.path.join(d, f"Pasted image {_UP['n']}.png")
+        data.convert("RGB").save(path)
+        return jsonify(**register_extra([path]))
+    return jsonify(files=[], errors=["The clipboard has no file or picture"])
+
+
+@app.post("/api/xpick")
+def xpick():
+    if not HOOKS["pick"]:
+        return jsonify(error="No file dialog"), 500
+    try:
+        paths = HOOKS["pick"]()
+    except Exception as e:
+        return jsonify(error=str(e)), 500
+    return jsonify(**register_extra(paths or []))
 
 
 @app.get("/api/autostart")
@@ -591,7 +646,7 @@ def sheet(f, idx, W, H, mono, mode="fit", ppmm=None, pct=100.0, num=None, rotate
     """One printed sheet: the page, with the page number printed directly on it.
     items = free layout from the Transform tool (None / empty = the normal way)."""
     if items and ppmm:
-        canvas = compose_items(f, idx, W, H, mono, ppmm, items)
+        canvas = compose_items(W, H, mono, ppmm, items)
     else:
         canvas = compose(f, idx, W, H, mono, rotate, mode, ppmm, pct)
     if num and ppmm:
@@ -652,32 +707,43 @@ def load_source(f, idx, want_w, mono):
     return img.convert("L") if mono else img
 
 
-def clean_items(raw):
-    """Placed copies of a page: centre (cx, cy) and size (w, h) in mm from the printable
-    area's top-left corner, rotation in degrees (clockwise). Bad entries are dropped."""
+def clean_items(raw, own=None):
+    """Pictures placed on a sheet: centre (cx, cy) and size (w, h) in mm from the printable
+    area's top-left corner, rotation in degrees (clockwise), and which file/page to draw
+    (f, p; default = the sheet's own page). Bad entries are dropped."""
     out = []
     if not isinstance(raw, list):
         return out
-    for it in raw[:60]:
+    for it in raw[:100]:
         try:
             v = {k: float(it[k]) for k in ("cx", "cy", "w", "h")}
             v["rot"] = float(it.get("rot", 0))
+            fobj = FILES.get(str(it["f"])) if it.get("f") else (own[0] if own else None)
+            pg = int(it["p"]) if it.get("p") is not None else (own[1] if own else 0)
         except Exception:
             continue
         if not all(math.isfinite(x) for x in v.values()):
             continue
+        if not fobj or not (0 <= pg < fobj["pages"]):
+            continue
         v["w"] = max(1.0, min(3000.0, v["w"]))
         v["h"] = max(1.0, min(3000.0, v["h"]))
+        v["file"], v["pg"] = fobj, pg
         out.append(v)
     return out
 
 
-def compose_items(f, idx, W, H, mono, ppmm, items):
-    """White sheet of W x H pixels with the page placed as many times as asked,
-    each copy with its own position, size and rotation."""
+def compose_items(W, H, mono, ppmm, items):
+    """White sheet of W x H pixels with every picture placed where it was put,
+    each with its own size and rotation (later ones on top)."""
     canvas = Image.new("L" if mono else "RGB", (W, H), 255 if mono else (255, 255, 255))
-    src = load_source(f, idx, max(it["w"] for it in items) * ppmm, mono)
+    need = {}
     for it in items:
+        k = (it["file"]["id"], it["pg"])
+        need[k] = [it["file"], it["pg"], max(need.get(k, [0, 0, 0])[2], it["w"] * ppmm)]
+    srcs = {k: load_source(v[0], v[1], v[2], mono) for k, v in need.items()}
+    for it in items:
+        src = srcs[(it["file"]["id"], it["pg"])]
         tw, th = max(1, round(it["w"] * ppmm)), max(1, round(it["h"] * ppmm))
         if tw * th > 60_000_000:
             continue
@@ -818,7 +884,7 @@ def preview():
     AH = max(1, min(H - oy, int(a["ah"] * s)))
     mono = request.args.get("color") != "color"
     num = numspec(request.args, f["id"], p)
-    if request.args.get("blank") == "1":   # Transform tool: empty sheet, the copies are drawn by the page
+    if request.args.get("blank") == "1":   # Transform tool: empty sheet, the pictures are drawn by the page
         page = Image.new("RGB", (AW, AH), (255, 255, 255))
         if num:
             stamp(page, num, s)
@@ -971,7 +1037,8 @@ def do_print():
                 d["printer"], d.get("paper"), color, d.get("duplex", "off"), orient, copies, len(pages),
                 lambda i, W, H, m: sheet(pages[i][0], pages[i][1], W, H, m, mode, W / area_mm, pct,
                                          numspec(nargs, pages[i][0]["id"], pages[i][1]),
-                                         items=clean_items(lay.get(f'{pages[i][0]["id"]}:{pages[i][1]}'))),
+                                         items=clean_items(lay.get(f'{pages[i][0]["id"]}:{pages[i][1]}'),
+                                                           (pages[i][0], pages[i][1]))),
                 lambda done, total: JOBS[jid].update(done=done, total=total),
                 d.get("title", "PC Print"), profile=profile)
             JOBS[jid]["state"] = "done"
