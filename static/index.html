@@ -1093,11 +1093,11 @@ function tfDrag(e,box,idx,mode,hd,onClick){
     }
   };
   const end=(ev,cancel)=>{
+    const tb=(moved&&mode==='move'&&!cancel)?tfBoxAt(ev):null;   // look under the mouse before the dragging state is removed
     window.removeEventListener('pointermove',mv);window.removeEventListener('pointerup',up);window.removeEventListener('pointercancel',cn);
     document.querySelectorAll('.tfdrop').forEach(b=>b.classList.remove('tfdrop'));
     document.body.classList.remove('tfdragging');box.classList.remove('tfsrc');box._clip.style.overflow='';
     if(moved&&mode==='move'&&!cancel){
-      const tb=tfBoxAt(ev);
       if(tb&&tb!==box&&LAY[tb._k]){tfMoveAcross(box,tb,idx,os,r,ev.clientX-x0,ev.clientY-y0,kx);return}
     }
     if(!moved&&onClick)onClick();
