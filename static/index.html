@@ -974,7 +974,7 @@ async function pvRenderT(list){
     list.slice(i,i+step).forEach((p,k2)=>{
       const k=kk(p);
       const cap=step===2?(k2===0?'Front':'Back')+` · page ${i+k2+1} of ${n}`:`Page ${i+1} of ${n}`;
-      const body=LAY[k]?tfSheet(p,a,q):el('div',{className:'mut',textContent:'Could not read this page'});
+      const body=LAY[k]?tfSheet(p,a,q,i+k2):el('div',{className:'mut',textContent:'Could not read this page'});
       const xb=el('button',{className:'tbtn tfxp',textContent:'🗑 Delete page',title:'Delete this whole page with everything on it'});
       xb.onclick=e=>{e.stopPropagation();tfDeletePage(k)};
       const sh=el('div',{className:'pvsheet'},body,el('div',{className:'tfcap'},el('small',{className:'mut',textContent:cap}),xb));
@@ -993,10 +993,10 @@ function plusBtn(after){
   b.onclick=e=>{e.stopPropagation();tfInsertPage(after)};
   return el('div',{className:'tfplus'},b);
 }
-function tfSheet(p,a,q){
+function tfSheet(p,a,q,pos){
   const k=kk(p),box=el('div',{className:'tfbox'});
   box._k=k;box.style.aspectRatio=`${a.pw} / ${a.ph}`;
-  const bg=el('img',{className:'tfbg',alt:'',draggable:false,src:`/api/preview?f=${p.f}&p=${p.p}&${p.extra?'num=0&':''}${q}&blank=1`});
+  const bg=el('img',{className:'tfbg',alt:'',draggable:false,src:`/api/preview?f=${p.f}&p=${p.p}&nn=${pos+1}&${q}&blank=1`});
   const clip=el('div',{className:'tfclip'}),ui=el('div',{className:'tfui'});
   [clip,ui].forEach(d=>Object.assign(d.style,{left:a.ox/a.pw*100+'%',top:a.oy/a.ph*100+'%',width:a.aw/a.pw*100+'%',height:a.ah/a.ph*100+'%'}));
   box._clip=clip;box._ui=ui;box.append(bg,clip,ui);
