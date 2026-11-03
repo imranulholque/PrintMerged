@@ -100,6 +100,8 @@ body.s1 .s2only,body.s2 .s1only{display:none!important}
 .tfclip{overflow:hidden}
 .pvsheet .tfclip img.tfi{position:absolute;display:block;max-width:none;min-height:0;border-radius:0;box-shadow:none;background:none;pointer-events:none}
 .tfh{position:absolute;cursor:move}
+.tfdragging .tfh{pointer-events:none!important}
+.tfbox.tfsrc{z-index:20}
 .tfbox.tfdrop::after{content:'';position:absolute;inset:0;outline:3px solid var(--pri);outline-offset:-3px;background:rgba(37,99,235,.08);pointer-events:none;z-index:5}
 .tfempty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:12px;color:#9aa0aa;font-size:13px;pointer-events:none}
 .tfh:hover{outline:1px dashed var(--pri)}
@@ -335,6 +337,7 @@ body.s1 .s2only,body.s2 .s1only{display:none!important}
         <div><b>Ctrl + C / Ctrl + X</b><span>copy / cut the selected pictures</span></div>
         <div><b>Ctrl + V</b><span>paste on the page under the mouse</span></div>
         <div><b>Ctrl + D</b><span>duplicate on the same page</span></div>
+        <div><b>Ctrl + Z / Ctrl + Y</b><span>undo / redo</span></div>
         <div><b>Delete</b><span>remove (an empty page disappears)</span></div>
         <div><b>Drop a file</b><span>add another picture to the page</span></div>
         <div><b>Esc</b><span>deselect</span></div>
@@ -596,9 +599,13 @@ document.addEventListener('paste',e=>{
   const t=e.target;if(t&&/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)&&t.type!=='checkbox')return;
   e.preventDefault();
   const fl=e.clipboardData&&e.clipboardData.files;
-  if(fl&&fl.length)uploadFiles(fl);
-  else if(TF.on&&STEP===2&&TFCLIP)tfPasteInternal(tfTargetBox(null,true));
-  else pasteClipboard();
+  if(TF.on&&STEP===2){
+    if(fl&&fl.length)tfAddFiles([...fl],null,true);
+    else if(TFCLIP)tfPasteInternal(tfTargetBox(null,true));
+    else tfFromServer('/api/xpaste',true);
+    return;
+  }
+  if(fl&&fl.length)uploadFiles(fl);else pasteClipboard();
 });
 
 /* ---------------- page numbers ---------------- */
@@ -979,7 +986,7 @@ function tfSheet(p,a,q){
   [clip,ui].forEach(d=>Object.assign(d.style,{left:a.ox/a.pw*100+'%',top:a.oy/a.ph*100+'%',width:a.aw/a.pw*100+'%',height:a.ah/a.ph*100+'%'}));
   box._clip=clip;box._ui=ui;box.append(bg,clip,ui);
   box.addEventListener('pointerenter',()=>{TF.hov=k});
-  box.addEventListener('pointerdown',()=>{TF.cur=k},true);
+  box.addEventListener('pointerdown',()=>{TF.cur=k;tfBlur()},true);
   box.addEventListener('pointerdown',e=>{if(e.target.closest('.tfh')||e.ctrlKey||e.shiftKey)return;TF.sel=null;tfSelChanged()});
   tfBuild(box);return box;
 }
@@ -1015,9 +1022,10 @@ function tfHits(box){
 function tfPlaceAll(box){LAY[box._k].items.forEach((it,i)=>{if(box._vis[i])place(box._vis[i],it);if(box._hit[i])place(box._hit[i],it)})}
 function tfSelChanged(){document.querySelectorAll('.tfbox').forEach(tfHits);tfSync()}
 function tfRebuild(k){const b=tfBoxOf(k);if(b)tfBuild(b);tfSelChanged()}
+function tfBlur(){const a=document.activeElement;if(a&&a!==document.body&&/^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName))a.blur()}
 function tfDown(e,box,i){
   if(e.button!==0)return;
-  e.preventDefault();e.stopPropagation();
+  e.preventDefault();e.stopPropagation();tfBlur();
   const k=box._k,L=LAY[k];
   if(e.ctrlKey||e.metaKey){   // Ctrl + click: add / remove from the selection
     let idx=TF.sel&&TF.sel.k===k?[...TF.sel.idx]:[];
@@ -1028,6 +1036,7 @@ function tfDown(e,box,i){
   if(!had){tfSetSel(k,[i]);tfSelChanged()}
   let idx=[...TF.sel.idx];
   if(e.altKey){   // Alt + drag: copy everything selected, then drag the copies
+    tfSnap();
     const n=L.items.length,pos=idx.indexOf(i);
     idx.forEach(j=>L.items.push({...L.items[j]}));
     idx=idx.map((_,t)=>n+t);L.touched=true;
@@ -1043,6 +1052,10 @@ function tfDrag(e,box,idx,mode,hd,onClick){
   const x0=e.clientX,y0=e.clientY;let moved=false;
   const mv=ev=>{
     if(!moved&&Math.hypot(ev.clientX-x0,ev.clientY-y0)<3)return;
+    if(!moved){
+      tfSnap();
+      if(mode==='move'){document.body.classList.add('tfdragging');box.classList.add('tfsrc');box._clip.style.overflow='visible'}
+    }
     moved=true;
     const dx=(ev.clientX-x0)/kx,dy=(ev.clientY-y0)/kx;
     if(mode==='move'){items.forEach((it,t)=>{it.cx=os[t].cx+dx;it.cy=os[t].cy+dy})}
@@ -1067,6 +1080,7 @@ function tfDrag(e,box,idx,mode,hd,onClick){
   const end=(ev,cancel)=>{
     window.removeEventListener('pointermove',mv);window.removeEventListener('pointerup',up);window.removeEventListener('pointercancel',cn);
     document.querySelectorAll('.tfdrop').forEach(b=>b.classList.remove('tfdrop'));
+    document.body.classList.remove('tfdragging');box.classList.remove('tfsrc');box._clip.style.overflow='';
     if(moved&&mode==='move'&&!cancel){
       const tb=tfBoxAt(ev);
       if(tb&&tb!==box&&LAY[tb._k]){tfMoveAcross(box,tb,idx,os,r,ev.clientX-x0,ev.clientY-y0,kx);return}
@@ -1107,20 +1121,38 @@ function tfCopy(){
 function tfCut(){if(tfCopy())tfDelete()}
 function tfPasteInternal(box){
   if(!TFCLIP||!box)return;
-  const L=LAY[box._k];if(!L)return;
+  const L=LAY[box._k];if(!L)return;tfSnap();
   const off=TFCLIP.k===box._k?5*(++TFCLIP.n):0,n=L.items.length;
   TFCLIP.items.forEach(it=>L.items.push({...it,cx:it.cx+off,cy:it.cy+off}));
   L.touched=true;TF.cur=box._k;tfSetSel(box._k,TFCLIP.items.map((_,t)=>n+t));tfRebuild(box._k);
 }
 function tfAddPage(){
-  const sheets=tfSheets(selPages());if(!sheets.length)return;
+  const sheets=tfSheets(selPages());if(!sheets.length)return;tfSnap();
   const b=tfTargetBox(null),after=b?b._k:kk(sheets[sheets.length-1]),t=sheets[0];
   const x={k:'x'+(++tfXn),after,f:t.f,p:t.p,name:t.name,extra:true};
   TFX.push(x);LAY[x.k]={items:[],touched:true};TF.sel=null;TF.cur=x.k;
   pvRender();
   setTimeout(()=>{const nb=tfBoxOf(x.k);if(nb)nb.scrollIntoView({block:'center',behavior:'smooth'})},500);
 }
-window.addEventListener('blur',()=>{TFCLIP=null});   // after using another program, Ctrl+V means that program's clipboard
+window.addEventListener('blur',()=>{TFCLIP=null});
+const TFUND=[],TFRED=[];let tfLT=0,tfLTag='';
+const tfState=()=>JSON.stringify({LAY,TFX,TFDEL:[...TFDEL],tfXn});
+function tfSnap(tag){   // remember the layout before a change (Ctrl+Z); repeated nudges count as one step
+  const now=Date.now();
+  if(tag&&tag===tfLTag&&now-tfLT<800){tfLT=now;return}
+  tfLTag=tag||'';tfLT=now;TFUND.push(tfState());if(TFUND.length>60)TFUND.shift();TFRED.length=0;
+}
+function tfLoad(s){
+  const o=JSON.parse(s);
+  Object.keys(LAY).forEach(k=>delete LAY[k]);Object.assign(LAY,o.LAY);TFX=o.TFX;tfXn=o.tfXn;
+  [...TFDEL].forEach(k=>{if(!o.TFDEL.includes(k))setSel(k,true)});
+  o.TFDEL.forEach(k=>setSel(k,false));TFDEL.clear();o.TFDEL.forEach(k=>TFDEL.add(k));
+  updateCount();TF.sel=null;pvRender();
+}
+function tfUndo(){const s=TFUND.pop();if(!s)return toast('Nothing to undo');TFRED.push(tfState());tfLoad(s)}
+function tfRedo(){const s=TFRED.pop();if(!s)return toast('Nothing to redo');TFUND.push(tfState());tfLoad(s)}
+document.addEventListener('copy',e=>{if(TF.on&&STEP===2&&TFCLIP&&e.clipboardData){e.clipboardData.setData('text/plain','PC Print pictures');e.preventDefault()}});
+document.addEventListener('cut',e=>{if(TF.on&&STEP===2&&TFCLIP&&e.clipboardData){e.clipboardData.setData('text/plain','PC Print pictures');e.preventDefault()}});   // after using another program, Ctrl+V means that program's clipboard
 
 /* ---- dock: buttons and number boxes ---- */
 function tfSync(){
@@ -1150,6 +1182,7 @@ function tfTouch(){
   e.addEventListener('change',()=>{
     const its=tfItems();if(!its.length)return;
     const v=parseFloat(e.value);if(!isFinite(v)){tfSync();return}
+    tfSnap();
     const mm=v*UN[TF.unit];
     if(id==='tfW'){if(mm>=2)its.forEach(it=>{const r=it.h/it.w;it.w=Math.min(1500,mm);if(TF.lock)it.h=it.w*r})}
     else if(id==='tfH'){if(mm>=2)its.forEach(it=>{const r=it.w/it.h;it.h=Math.min(1500,mm);if(TF.lock)it.w=it.h*r})}
@@ -1166,16 +1199,16 @@ document.querySelectorAll('#tfSeg button').forEach(b=>b.onclick=()=>{
 $('#tfLockB').onclick=()=>{TF.lock=!TF.lock;tfSync()};
 $('#tfHelpB').onclick=e=>{e.stopPropagation();$('#tfhelp').hidden=!$('#tfhelp').hidden};
 document.addEventListener('click',e=>{if(!e.target.closest('#tfhelp,#tfHelpB'))$('#tfhelp').hidden=true});
-function tfRotate(deg){tfItems().forEach(it=>{it.rot=(((it.rot+deg)%360)+360)%360});tfTouch()}
+function tfRotate(deg){if(tfItems().length)tfSnap();tfItems().forEach(it=>{it.rot=(((it.rot+deg)%360)+360)%360});tfTouch()}
 function tfDuplicate(){
   const s=TF.sel,its=tfItems();if(!its.length)return;
-  const L=LAY[s.k],n=L.items.length;
+  const L=LAY[s.k],n=L.items.length;tfSnap();
   its.forEach(it=>L.items.push({...it,cx:it.cx+5,cy:it.cy+5}));
   L.touched=true;tfSetSel(s.k,its.map((_,t)=>n+t));tfRebuild(s.k);
 }
 function tfDelete(){
   const s=TF.sel;if(!s||!LAY[s.k])return;
-  const L=LAY[s.k],rm=new Set(s.idx);
+  const L=LAY[s.k],rm=new Set(s.idx);tfSnap();
   L.items=L.items.filter((_,i)=>!rm.has(i));L.touched=true;TF.sel=null;
   if(!L.items.length)tfDropPage(s.k);else tfRebuild(s.k);
 }
@@ -1184,7 +1217,7 @@ function tfSelectAll(){
   tfSetSel(b._k,LAY[b._k].items.map((_,i)=>i));tfSelChanged();
 }
 function tfCenter(){
-  const its=tfItems();if(!its.length)return;
+  const its=tfItems();if(!its.length)return;tfSnap();
   let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;
   its.forEach(it=>{x0=Math.min(x0,it.cx-it.w/2);x1=Math.max(x1,it.cx+it.w/2);y0=Math.min(y0,it.cy-it.h/2);y1=Math.max(y1,it.cy+it.h/2)});
   const dx=TFA.aw/2-(x0+x1)/2,dy=TFA.ah/2-(y0+y1)/2;
@@ -1192,8 +1225,8 @@ function tfCenter(){
 }
 $('#tfDup').onclick=tfDuplicate;$('#tfDel').onclick=tfDelete;$('#tfAll').onclick=tfSelectAll;
 $('#tfRot90').onclick=()=>tfRotate(90);$('#tfCenter').onclick=tfCenter;
-$('#tfReset').onclick=()=>{const b=tfTargetBox(null);if(!b)return;if(TFX.some(x=>x.k===b._k))LAY[b._k]={items:[],touched:true};else delete LAY[b._k];TF.sel=null;pvRender()};
-$('#tfResetAll').onclick=()=>{TFX=[];Object.keys(LAY).forEach(k=>delete LAY[k]);TFDEL.forEach(k=>setSel(k,true));TFDEL.clear();updateCount();TF.sel=null;pvRender()};
+$('#tfReset').onclick=()=>{const b=tfTargetBox(null);if(!b)return;tfSnap();if(TFX.some(x=>x.k===b._k))LAY[b._k]={items:[],touched:true};else delete LAY[b._k];TF.sel=null;pvRender()};
+$('#tfResetAll').onclick=()=>{tfSnap();TFX=[];Object.keys(LAY).forEach(k=>delete LAY[k]);TFDEL.forEach(k=>setSel(k,true));TFDEL.clear();updateCount();TF.sel=null;pvRender()};
 $('#tfPage').onclick=tfAddPage;
 $('#btf').onclick=()=>{
   TF.on=!TF.on;$('#btf').classList.toggle('on',TF.on);
@@ -1211,7 +1244,7 @@ function tfPoint(box,ev){
 }
 async function tfAddItems(box,files,at){
   if(!box||!files||!files.length)return;
-  const k=box._k,L=LAY[k],a=TFA,idx=[];let n=0,pdfNote=false;
+  const k=box._k,L=LAY[k],a=TFA,idx=[];let n=0,pdfNote=false;tfSnap();
   for(const f of files){
     let inf;try{inf=await (await api(`/api/pageinfo?f=${f.id}&p=0`)).json()}catch{continue}
     if(!inf||!inf.w)continue;
@@ -1225,8 +1258,8 @@ async function tfAddItems(box,files,at){
   L.touched=true;tfSetSel(k,idx);tfRebuild(k);
   toast(`Added ${n} picture${n>1?'s':''} to this page`+(pdfNote?'\n(only the first page of a PDF is used)':''));
 }
-async function tfAddFiles(files,ev){
-  const box=tfTargetBox(ev);if(!box)return toast('Open a page first');
+async function tfAddFiles(files,ev,hover){
+  const box=tfTargetBox(ev,hover);if(!box)return toast('Open a page first');
   const at=ev?tfPoint(box,ev):null;
   toast(`Adding ${files.length} picture${files.length>1?'s':''}…`);
   try{
@@ -1236,8 +1269,8 @@ async function tfAddFiles(files,ev){
     if(j.errors&&j.errors.length)toast(j.errors.join('\n'));
   }catch(e){toast('Could not add the picture')}
 }
-async function tfFromServer(url){
-  const box=tfTargetBox(null);if(!box)return toast('Open a page first');
+async function tfFromServer(url,hover){
+  const box=tfTargetBox(null,hover);if(!box)return toast('Open a page first');
   try{
     const j=await (await api(url,{method:'POST'})).json();
     if(j.error)return toast(j.error);
@@ -1254,14 +1287,17 @@ document.addEventListener('keydown',e=>{
   const t=e.target;if(t&&/^(INPUT|SELECT|TEXTAREA)$/.test(t.tagName))return;
   const k=e.key.toLowerCase();
   if(e.ctrlKey&&k==='a'){e.preventDefault();tfSelectAll();return}
+  if(e.ctrlKey&&k==='z'&&!e.shiftKey){e.preventDefault();tfUndo();return}
+  if(e.ctrlKey&&(k==='y'||(k==='z'&&e.shiftKey))){e.preventDefault();tfRedo();return}
+  if(k==='escape'){TF.sel=null;tfSelChanged();$('#tfhelp').hidden=true;return}
   if(!tfItems().length)return;
-  if(e.ctrlKey&&k==='c'){e.preventDefault();tfCopy();return}
-  if(e.ctrlKey&&k==='x'){e.preventDefault();tfCut();return}
+  if(e.ctrlKey&&k==='c'){tfCopy();return}      // the browser's copy event then clears any older clipboard
+  if(e.ctrlKey&&k==='x'){tfCut();return}
   if(k==='delete'||k==='backspace'){e.preventDefault();tfDelete()}
   else if(e.ctrlKey&&k==='d'){e.preventDefault();tfDuplicate()}
   else if(!e.ctrlKey&&!e.altKey&&k==='r'){e.preventDefault();tfRotate(e.shiftKey?-90:90)}
   else if(!e.ctrlKey&&e.key.startsWith('Arrow')){
-    e.preventDefault();const d=e.shiftKey?10:1,its=tfItems();
+    e.preventDefault();tfSnap('arrow');const d=e.shiftKey?10:1,its=tfItems();
     its.forEach(it=>{
       if(e.key==='ArrowLeft')it.cx-=d;else if(e.key==='ArrowRight')it.cx+=d;
       else if(e.key==='ArrowUp')it.cy-=d;else if(e.key==='ArrowDown')it.cy+=d;
