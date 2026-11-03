@@ -1,4 +1,4 @@
-import os, sys, io, re, hmac, socket, uuid, time, json, shutil, tempfile, threading, functools
+import os, sys, io, re, math, hmac, socket, uuid, time, json, shutil, tempfile, threading, functools
 from flask import Flask, request, jsonify, send_file, session
 import fitz
 from PIL import Image, ImageOps, ImageDraw, ImageFont, ImageGrab
@@ -587,11 +587,110 @@ def compose(f, idx, W, H, mono, rotate=True, mode="fit", ppmm=None, pct=100.0):
     return canvas
 
 
-def sheet(f, idx, W, H, mono, mode="fit", ppmm=None, pct=100.0, num=None, rotate=True):
-    """One printed sheet: the page, with the page number printed directly on it."""
-    canvas = compose(f, idx, W, H, mono, rotate, mode, ppmm, pct)
+def sheet(f, idx, W, H, mono, mode="fit", ppmm=None, pct=100.0, num=None, rotate=True, items=None):
+    """One printed sheet: the page, with the page number printed directly on it.
+    items = free layout from the Transform tool (None / empty = the normal way)."""
+    if items and ppmm:
+        canvas = compose_items(f, idx, W, H, mono, ppmm, items)
+    else:
+        canvas = compose(f, idx, W, H, mono, rotate, mode, ppmm, pct)
     if num and ppmm:
         stamp(canvas, num, ppmm)
+    return canvas
+
+
+# ------------------------------------------------- free layout (Transform)
+def natural_mm(f, idx):
+    """Size of the page at its natural (100%) size, in mm."""
+    if f["kind"] == "pdf":
+        with LOCK:
+            doc = fitz.open(f["path"])
+            try:
+                r = doc[idx].rect
+                return r.width * 25.4 / 72, r.height * 25.4 / 72
+            finally:
+                doc.close()
+    with Image.open(f["path"]) as im:
+        try:
+            dpi = float((im.info.get("dpi") or (300, 300))[0])
+        except Exception:
+            dpi = 300.0
+        if dpi < 1:
+            dpi = 300.0
+        w, h = im.size
+        if im.getexif().get(274, 1) in (5, 6, 7, 8):
+            w, h = h, w
+    return w / dpi * 25.4, h / dpi * 25.4
+
+
+def load_source(f, idx, want_w, mono):
+    """The page as one flat picture, about want_w pixels wide (never enlarged for pictures)."""
+    want_w = max(16.0, float(want_w))
+    if f["kind"] == "pdf":
+        with LOCK:
+            doc = fitz.open(f["path"])
+            try:
+                pg = doc[idx]
+                pw, ph = pg.rect.width, pg.rect.height
+                s = min(want_w / pw, 8000.0 / max(pw, ph))
+                pix = pg.get_pixmap(matrix=fitz.Matrix(s, s),
+                                    colorspace=fitz.csGRAY if mono else fitz.csRGB, alpha=False)
+                return Image.frombytes("L" if mono else "RGB", (pix.width, pix.height), pix.samples)
+            finally:
+                doc.close()
+    img = Image.open(f["path"])
+    img = ImageOps.exif_transpose(img)
+    if img.mode in ("RGBA", "LA", "P"):
+        img = img.convert("RGBA")
+        bg = Image.new("RGB", img.size, "white")
+        bg.paste(img, mask=img.split()[3])
+        img = bg
+    else:
+        img = img.convert("RGB")
+    if img.width > want_w:
+        img = img.resize((max(1, int(want_w)), max(1, int(img.height * want_w / img.width))), Image.LANCZOS)
+    return img.convert("L") if mono else img
+
+
+def clean_items(raw):
+    """Placed copies of a page: centre (cx, cy) and size (w, h) in mm from the printable
+    area's top-left corner, rotation in degrees (clockwise). Bad entries are dropped."""
+    out = []
+    if not isinstance(raw, list):
+        return out
+    for it in raw[:60]:
+        try:
+            v = {k: float(it[k]) for k in ("cx", "cy", "w", "h")}
+            v["rot"] = float(it.get("rot", 0))
+        except Exception:
+            continue
+        if not all(math.isfinite(x) for x in v.values()):
+            continue
+        v["w"] = max(1.0, min(3000.0, v["w"]))
+        v["h"] = max(1.0, min(3000.0, v["h"]))
+        out.append(v)
+    return out
+
+
+def compose_items(f, idx, W, H, mono, ppmm, items):
+    """White sheet of W x H pixels with the page placed as many times as asked,
+    each copy with its own position, size and rotation."""
+    canvas = Image.new("L" if mono else "RGB", (W, H), 255 if mono else (255, 255, 255))
+    src = load_source(f, idx, max(it["w"] for it in items) * ppmm, mono)
+    for it in items:
+        tw, th = max(1, round(it["w"] * ppmm)), max(1, round(it["h"] * ppmm))
+        if tw * th > 60_000_000:
+            continue
+        im = src if src.size == (tw, th) else src.resize((tw, th), Image.LANCZOS)
+        rot = it["rot"] % 360
+        if 0.01 < rot < 359.99:
+            rgba = im.convert("RGBA").rotate(-rot, expand=True, resample=Image.BICUBIC)
+            tile, mask = rgba.convert(canvas.mode), rgba.getchannel("A")
+        else:
+            tile, mask = im, None
+        x = round(it["cx"] * ppmm - tile.width / 2)
+        y = round(it["cy"] * ppmm - tile.height / 2)
+        canvas.paste(tile, (x, y), mask)
     return canvas
 
 
@@ -673,6 +772,32 @@ def area():
     return jsonify(get_area(request.args))
 
 
+@app.get("/api/pageinfo")
+def pageinfo():
+    """Natural size of a page in mm (used by the Transform tool)."""
+    f, p = get_page()
+    if not f:
+        return "", 404
+    try:
+        w, h = natural_mm(f, p)
+    except Exception as e:
+        return jsonify(error=str(e)), 500
+    return jsonify(w=w, h=h)
+
+
+@app.get("/api/src")
+def src_img():
+    """The page as a flat picture (Transform tool draws and moves copies of it)."""
+    f, p = get_page()
+    if not f:
+        return "", 404
+    try:
+        px = max(200, min(3000, int(float(request.args.get("px", 1600)))))
+    except Exception:
+        px = 1600
+    return send_img(load_source(f, p, px, False))
+
+
 @app.get("/api/preview")
 def preview():
     f, p = get_page()
@@ -693,7 +818,12 @@ def preview():
     AH = max(1, min(H - oy, int(a["ah"] * s)))
     mono = request.args.get("color") != "color"
     num = numspec(request.args, f["id"], p)
-    page = sheet(f, p, AW, AH, mono, mode, s, get_pct(request.args.get("pct")), num).convert("RGB")
+    if request.args.get("blank") == "1":   # Transform tool: empty sheet, the copies are drawn by the page
+        page = Image.new("RGB", (AW, AH), (255, 255, 255))
+        if num:
+            stamp(page, num, s)
+    else:
+        page = sheet(f, p, AW, AH, mono, mode, s, get_pct(request.args.get("pct")), num).convert("RGB")
     img = Image.new("RGB", (W, H), (205, 208, 214))  # gray = area the printer cannot print on
     img.paste(page, (ox, oy))
     d = ImageDraw.Draw(img)
@@ -826,6 +956,7 @@ def do_print():
     profile = find_profile(d.get("printer", ""), d.get("profile"))  # None = normal way
     mode = d.get("scale") if d.get("scale") in SCALES else "fit"
     pct = get_pct(d.get("pct"))
+    lay = d.get("layout") if isinstance(d.get("layout"), dict) else {}   # only sent when Transform is on
     nd = d.get("num") or {}
     nargs = {"num": "1" if nd.get("on") else "0", "npos": nd.get("pos"), "nalign": nd.get("align"),
              "nsize": nd.get("size"), "nstart": nd.get("start"),
@@ -839,7 +970,8 @@ def do_print():
             printing.print_job(
                 d["printer"], d.get("paper"), color, d.get("duplex", "off"), orient, copies, len(pages),
                 lambda i, W, H, m: sheet(pages[i][0], pages[i][1], W, H, m, mode, W / area_mm, pct,
-                                         numspec(nargs, pages[i][0]["id"], pages[i][1])),
+                                         numspec(nargs, pages[i][0]["id"], pages[i][1]),
+                                         items=clean_items(lay.get(f'{pages[i][0]["id"]}:{pages[i][1]}'))),
                 lambda done, total: JOBS[jid].update(done=done, total=total),
                 d.get("title", "PC Print"), profile=profile)
             JOBS[jid]["state"] = "done"
