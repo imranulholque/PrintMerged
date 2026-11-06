@@ -1,4 +1,5 @@
 import os, sys, io, re, math, hmac, socket, uuid, time, json, shutil, tempfile, threading, functools
+import subprocess, atexit, hashlib, secrets, collections
 from flask import Flask, request, jsonify, send_file, session
 import fitz
 from PIL import Image, ImageOps, ImageDraw, ImageFont, ImageGrab
@@ -41,6 +42,10 @@ def upload_dir():
 
 
 def cleanup():
+    try:
+        tunnel_stop()
+    except Exception:
+        pass
     if _UP["dir"]:
         shutil.rmtree(_UP["dir"], ignore_errors=True)
 
@@ -52,7 +57,14 @@ SREV = {"n": 0}
 LOCAL_ONLY = ("/api/add", "/api/pick", "/api/paste", "/api/autostart", "/api/phone/", "/api/x")
 
 
+PLOCK2 = threading.Lock()
+# lockout state per way of connecting: lan = same Wi-Fi, net = internet link
+FAIL = {"lan": {"fails": 0, "until": 0.0, "rounds": 0}, "net": {"fails": 0, "until": 0.0, "rounds": 0}}
+
+
 def ph_cfg():
+    """Phone settings. Same Wi-Fi (pw_on/pin/port) and Internet (net_pw_on/net_pin) are separate.
+    Internet PIN is ON by default and a random PIN is made the first time."""
     try:
         with open(PH_FILE, encoding="utf-8") as fh:
             d = json.load(fh)
@@ -62,15 +74,58 @@ def ph_cfg():
         port = int(d.get("port", 5050))
     except Exception:
         port = 5050
-    return {"pw_on": bool(d.get("pw_on")), "pin": str(d.get("pin", "")), "port": port}
+    npin = str(d.get("net_pin", ""))
+    if not (npin.isdigit() and len(npin) == 4):
+        npin = f"{secrets.randbelow(10000):04d}"
+        d["net_pin"] = npin
+        try:
+            with PLOCK2:
+                os.makedirs(CFG_DIR, exist_ok=True)
+                with open(PH_FILE, "w", encoding="utf-8") as fh:
+                    json.dump({"pw_on": bool(d.get("pw_on")), "pin": str(d.get("pin", "")), "port": port,
+                               "net_pw_on": bool(d.get("net_pw_on", True)), "net_pin": npin}, fh)
+        except Exception:
+            pass
+    return {"pw_on": bool(d.get("pw_on")), "pin": str(d.get("pin", "")), "port": port,
+            "net_pw_on": bool(d.get("net_pw_on", True)), "net_pin": npin}
+
+
+def origin():
+    """Where does this request come from?
+    pc  = this PC's own window (full access)
+    lan = a phone on the same Wi-Fi
+    net = somebody using the internet link. The tunnel program connects from 127.0.0.1 too,
+          so the headers it adds (and the host name) are checked first, otherwise internet
+          visitors would look like this PC."""
+    h = request.headers
+    host = (request.host or "").split(":")[0].lower()
+    if (any(k in h for k in ("Cf-Connecting-Ip", "Cf-Ray", "Cf-Visitor", "X-Forwarded-For", "X-Forwarded-Host"))
+            or host.endswith(".trycloudflare.com")):
+        return "net"
+    if request.remote_addr in LOCAL:
+        return "pc"
+    return "lan"
+
+
+def mode_pw(o, c=None):
+    c = c or ph_cfg()
+    return (c["net_pw_on"], c["net_pin"]) if o == "net" else (c["pw_on"], c["pin"])
+
+
+def tok(pin):
+    """Session proof tied to the current PIN: changing the PIN logs everybody out."""
+    return hashlib.sha256(("pcprint|" + pin).encode()).hexdigest()[:20]
 
 
 @app.before_request
 def guard():
-    """This PC's own window: full access. Phones (LAN): phone page + print API only
-    (PIN if password is on). Anything that touches this PC's disk/clipboard is PC-only."""
-    if request.remote_addr in LOCAL:
+    """This PC's own window: full access. Phones (Wi-Fi or internet link): phone page + print API only
+    (PIN if it is on for that way of connecting). Anything that touches this PC's disk/clipboard is PC-only."""
+    o = origin()
+    if o == "pc":
         return
+    if o == "net" and not NET["on"]:
+        return "internet access is off", 403
     p = request.path
     if p.startswith(LOCAL_ONLY):
         return "forbidden", 403
@@ -78,26 +133,32 @@ def guard():
         return
     if not p.startswith("/api/"):
         return "forbidden", 403
-    if ph_cfg()["pw_on"] and not session.get("ok"):
+    on, pin = mode_pw(o)
+    if on and session.get("ok_" + o) != tok(pin):
         return jsonify(error="login"), 401
 
 
 @app.post("/api/login")
 def login():
+    o = origin()
     now = time.time()
-    if not ph_cfg()["pw_on"]:
-        session["ok"] = True
+    on, pin_ok = mode_pw(o)
+    if o == "pc" or not on:
+        session["ok_" + o] = tok(pin_ok)
         return jsonify(ok=True)
-    if now < PH["until"]:
-        return jsonify(error="Too many tries. Wait 30 seconds."), 429
+    f = FAIL[o]
+    if now < f["until"]:
+        return jsonify(error=f"Too many tries. Wait {int(f['until'] - now) + 1} seconds."), 429
     pin = str((request.get_json(silent=True) or {}).get("pin", ""))
-    if hmac.compare_digest(pin, ph_cfg()["pin"]):
-        session["ok"] = True
-        PH["fails"] = 0
+    if hmac.compare_digest(pin, pin_ok):
+        session["ok_" + o] = tok(pin_ok)
+        f["fails"] = f["rounds"] = 0
         return jsonify(ok=True)
-    PH["fails"] += 1
-    if PH["fails"] >= 5:
-        PH["fails"], PH["until"] = 0, now + 30
+    f["fails"] += 1
+    if f["fails"] >= 5:
+        # every 5 wrong tries: wait 30 s, then 60 s, 120 s ... (max 1 hour). Slows down guessing a lot.
+        f["fails"], f["until"] = 0, now + min(3600, 30 * (2 ** f["rounds"]))
+        f["rounds"] += 1
     return jsonify(error="Wrong PIN"), 403
 
 
@@ -112,10 +173,104 @@ def local_ip():
         s.close()
 
 
+# ------------------------------------------------ internet link (Cloudflare quick tunnel)
+NET = {"on": False, "state": "off", "url": "", "error": "", "proc": None, "gen": 0}
+NLOCK = threading.Lock()
+TUN_URL = re.compile(r"https://([a-z0-9-]+)\.trycloudflare\.com")
+
+
+def find_cloudflared():
+    for p in (res(os.path.join("bin", "cloudflared.exe")), os.path.join(CFG_DIR, "cloudflared.exe"),
+              shutil.which("cloudflared")):
+        if p and os.path.isfile(p):
+            return p
+    return None
+
+
+def _tunnel_kill_locked():
+    NET["gen"] += 1          # the old watcher thread sees this and stops touching NET
+    pr, NET["proc"] = NET["proc"], None
+    NET.update(on=False, state="off", url="", error="")
+    if pr:
+        try:
+            pr.terminate()
+            try:
+                pr.wait(timeout=3)
+            except Exception:
+                pr.kill()
+        except Exception:
+            pass
+
+
+def tunnel_stop():
+    with NLOCK:
+        _tunnel_kill_locked()
+
+
+def _tunnel_watch(proc, gen):
+    tail = collections.deque(maxlen=6)
+    try:
+        for line in proc.stdout:
+            line = line.strip()
+            if line:
+                tail.append(line)
+            m = TUN_URL.search(line)
+            if m and m.group(1) != "api" and gen == NET["gen"] and not NET["url"]:
+                NET.update(url=m.group(0), state="on")
+    except Exception:
+        pass
+    try:
+        proc.wait(timeout=2)
+    except Exception:
+        pass
+    if gen == NET["gen"]:     # it stopped by itself (not by us)
+        NET.update(on=False, state="error", url="", proc=None,
+                   error="The internet link stopped. " + (tail[-1][:160] if tail else "Check the internet connection."))
+
+
+def _tunnel_timeout(gen):
+    time.sleep(40)
+    with NLOCK:
+        if gen == NET["gen"] and NET["state"] == "starting":
+            _tunnel_kill_locked()
+            NET.update(state="error", error="Could not get an internet link. Check the internet connection and try again.")
+
+
+def tunnel_start():
+    """Start (or restart = brand new link). Returns after the process is launched; the link
+    appears a few seconds later (state 'starting' -> 'on')."""
+    with NLOCK:
+        _tunnel_kill_locked()
+        exe = find_cloudflared()
+        if not exe:
+            NET.update(state="error", error="cloudflared.exe was not found. Internet access needs it next to the app (bin/cloudflared.exe).")
+            return
+        NET.update(on=True, state="starting")
+        gen = NET["gen"]
+        try:
+            proc = subprocess.Popen(
+                [exe, "tunnel", "--url", f"http://127.0.0.1:{PH['port']}", "--no-autoupdate", "--protocol", "http2"],
+                stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, errors="replace", creationflags=0x08000000 if os.name == "nt" else 0)   # no console window
+        except Exception as e:
+            NET.update(on=False, state="error", error=f"Could not start: {e}")
+            return
+        NET["proc"] = proc
+    threading.Thread(target=_tunnel_watch, args=(proc, gen), daemon=True).start()
+    threading.Thread(target=_tunnel_timeout, args=(gen,), daemon=True).start()
+
+
+atexit.register(tunnel_stop)
+
+
+def net_pub():
+    return {"state": NET["state"], "url": NET["url"], "error": NET["error"]}
+
+
 @app.get("/api/phone/info")
 def phone_info():
     c = ph_cfg()
-    return jsonify(url=f"http://{local_ip()}:{PH['port']}", active=PH["ok"], **c)
+    return jsonify(url=f"http://{local_ip()}:{PH['port']}", active=PH["ok"], net=net_pub(), **c)
 
 
 @app.post("/api/phone/set")
@@ -124,7 +279,11 @@ def phone_set():
     c = ph_cfg()
     pin, port = str(d.get("pin", c["pin"])), d.get("port", c["port"])
     on = bool(d.get("pw_on", c["pw_on"]))
+    npin = str(d.get("net_pin", c["net_pin"]))
+    non = bool(d.get("net_pw_on", c["net_pw_on"]))
     if on and not (pin.isdigit() and len(pin) == 4):
+        return jsonify(error="PIN must be exactly 4 digits"), 400
+    if non and not (npin.isdigit() and len(npin) == 4):
         return jsonify(error="PIN must be exactly 4 digits"), 400
     try:
         port = int(port)
@@ -132,20 +291,42 @@ def phone_set():
     except Exception:
         return jsonify(error="Port must be 1024-65535"), 400
     os.makedirs(CFG_DIR, exist_ok=True)
-    with open(PH_FILE, "w", encoding="utf-8") as fh:
-        json.dump({"pw_on": on, "pin": pin, "port": port}, fh)
+    with PLOCK2:
+        with open(PH_FILE, "w", encoding="utf-8") as fh:
+            json.dump({"pw_on": on, "pin": pin, "port": port, "net_pw_on": non, "net_pin": npin}, fh)
     if port != c["port"] and HOOKS["rebind"]:
         HOOKS["rebind"](port)
+        if NET["on"]:
+            tunnel_start()   # the tunnel must point to the new port (this gives a new link)
     return jsonify(ok=True, active=PH["ok"], port=PH["port"])
+
+
+@app.post("/api/phone/net")
+def phone_net():
+    """Internet access on / off. 'new': true = cut the old link and make a new one."""
+    d = request.get_json(silent=True) or {}
+    if d.get("on") is False:
+        tunnel_stop()
+    elif d.get("on") is True and (d.get("new") or not NET["on"]):
+        tunnel_start()
+    return jsonify(net=net_pub())
 
 
 @app.get("/api/phone/qr")
 def phone_qr():
     import qrcode
+    if request.args.get("mode") == "net":
+        if not NET["url"]:
+            return "", 404
+        text = NET["url"]
+    else:
+        text = f"http://{local_ip()}:{PH['port']}"
     b = io.BytesIO()
-    qrcode.make(f"http://{local_ip()}:{PH['port']}", box_size=8, border=2).save(b, "PNG")
+    qrcode.make(text, box_size=8, border=2).save(b, "PNG")
     b.seek(0)
-    return send_file(b, mimetype="image/png")
+    r = send_file(b, mimetype="image/png")
+    r.headers["Cache-Control"] = "no-store"
+    return r
 
 
 # ------------------------------------------------------------------ files
@@ -230,7 +411,7 @@ def pub(f):
 
 @app.get("/")
 def index():
-    page = "index.html" if request.remote_addr in LOCAL else "phone.html"
+    page = "index.html" if origin() == "pc" else "phone.html"
     r = send_file(res("static/" + page))
     r.headers["Cache-Control"] = "no-store"
     return r
@@ -324,7 +505,7 @@ def upload():
         NOTICE["t"] = ""
     added, errors = register(paths, sort=True)
     with SLOCK:
-        if request.remote_addr not in LOCAL:
+        if origin() != "pc":
             NOTICE["t"] = ""   # the phone gets the error in this answer
     if len(paths) == 1:
         if errors:
