@@ -22,10 +22,17 @@ jobs:
       - name: Install requirements
         run: pip install -r requirements.txt
 
+      - name: Download cloudflared (internet link)
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force bin | Out-Null
+          Invoke-WebRequest -Uri "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe" -OutFile bin\cloudflared.exe
+
       - name: Build exe
         run: >
           pyinstaller --noconsole --onefile --name PCPrint
           --add-data "static;static"
+          --add-binary "bin\cloudflared.exe;bin"
           --hidden-import pystray._win32
           --hidden-import win32com.client
           --collect-all webview
