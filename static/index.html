@@ -37,6 +37,10 @@ body.s1 .s2only,body.s2 .s1only{display:none!important}
 .dd{position:relative}
 .pop{position:absolute;top:calc(100% + 8px);left:0;width:340px;z-index:20;box-shadow:0 8px 30px rgba(0,0,0,.35);margin:0}
 .pop p{margin:4px 0}
+.phtabs{display:flex;width:100%;margin-bottom:10px;align-self:auto}.phtabs button{flex:1}
+.sw{appearance:none;-webkit-appearance:none;width:38px;height:22px;border-radius:11px;background:var(--bd);position:relative;cursor:pointer;border:0;padding:0;flex:none;transition:background .15s}
+.sw::after{content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:#fff;transition:transform .15s}
+.sw:checked{background:var(--pri)}.sw:checked::after{transform:translateX(16px)}.sw:disabled{opacity:.5;cursor:default}
 
 /* ---------- layout: sliding side panel + full stage ---------- */
 .main{flex:1;min-height:0;display:flex;position:relative;overflow:hidden}
@@ -182,6 +186,8 @@ body.s1 .s2only,body.s2 .s1only{display:none!important}
   <div class="dd">
     <button id="bph" title="Connect a phone (QR code)">📱 Phone</button>
     <div id="phpanel" class="card pop" hidden>
+      <div class="seg phtabs"><button id="phtl" class="on">Same Wi-Fi</button><button id="phtn">Internet</button></div>
+      <div id="phlan">
       <div style="text-align:center"><img id="phqr" alt="" style="width:180px;height:180px;background:#fff;border-radius:8px"></div>
       <p class="mut" id="phurl" style="text-align:center;margin:6px 0;word-break:break-all"></p>
       <div class="row" style="justify-content:center"><button id="phcopy" class="s">Copy link</button></div>
@@ -192,6 +198,22 @@ body.s1 .s2only,body.s2 .s1only{display:none!important}
       </div>
       <button id="phsave" class="p s">Save</button>
       <p class="mut" id="phmsg"></p>
+      </div>
+      <div id="phnet" hidden>
+        <div class="row" style="justify-content:space-between"><span class="name">Internet access</span><input type="checkbox" id="nton" class="sw"></div>
+        <p class="mut">Scan with your phone on any network. Only people with this private link can connect. Make a new link to cut off the old one.</p>
+        <div id="ntbody" hidden>
+          <div style="text-align:center"><img id="ntqr" alt="" style="width:180px;height:180px;background:#fff;border-radius:8px"></div>
+          <p class="mut" id="nturl" style="text-align:center;margin:6px 0;word-break:break-all"></p>
+          <div class="row" style="justify-content:center"><button id="ntcopy" class="s">Copy link</button><button id="ntnew" class="s">New link</button></div>
+        </div>
+        <p class="mut" id="ntstat"></p>
+        <label class="row" style="margin-top:8px"><input type="checkbox" id="ntpwon"> <span class="name">Ask for a 4-digit PIN on the phone</span></label>
+        <div class="field"><label>PIN</label><input id="ntpin" type="text" maxlength="4" inputmode="numeric" autocomplete="off"></div>
+        <button id="ntsave" class="p s">Save</button>
+        <p class="mut" id="ntmsg"></p>
+        <p class="mut" id="ntwarn" style="color:#dc2626" hidden>PIN is off: anyone who gets the link can send files to this PC.</p>
+      </div>
     </div>
   </div>
 
@@ -673,16 +695,61 @@ function numChanged(){
 $('#bnum').onclick=e=>{e.stopPropagation();$('#phpanel').hidden=true;$('#numpanel').hidden=!$('#numpanel').hidden};
 document.addEventListener('click',e=>{if(!e.target.closest('.dd')){$('#numpanel').hidden=true;$('#phpanel').hidden=true}});
 /* ---------------- phone connection ---------------- */
-let phUrl='';
-async function phLoad(){
+let phUrl='',ntUrl='',phTab='lan',phPoll=null;
+function phTabSet(t){
+  phTab=t;$('#phlan').hidden=t!=='lan';$('#phnet').hidden=t!=='net';
+  $('#phtl').classList.toggle('on',t==='lan');$('#phtn').classList.toggle('on',t==='net');
+  phLoad();
+}
+$('#phtl').onclick=()=>phTabSet('lan');$('#phtn').onclick=()=>phTabSet('net');
+function ntFill(d,first){
+  const n=d.net||{state:'off',url:'',error:''},live=n.state==='on'||n.state==='starting';
+  $('#nton').checked=live;$('#nton').disabled=false;
+  $('#ntbody').hidden=n.state!=='on';
+  if(n.state==='on'){
+    if(n.url!==ntUrl){ntUrl=n.url;$('#ntqr').src='/api/phone/qr?mode=net&t='+Date.now()}
+    $('#nturl').textContent=n.url;
+  }else ntUrl='';
+  $('#ntstat').textContent=n.state==='starting'?'Making the internet link… a few seconds.':n.state==='error'?n.error:'';
+  $('#ntstat').style.color=n.state==='error'?'#dc2626':'';
+  if(first||document.activeElement!==$('#ntpin')){$('#ntpwon').checked=d.net_pw_on;$('#ntpin').value=d.net_pin}
+  $('#ntwarn').hidden=!(live&&!$('#ntpwon').checked);
+}
+async function phLoad(first){
+  clearTimeout(phPoll);
   try{
     const d=await (await api('/api/phone/info')).json();
-    phUrl=d.url;$('#phqr').src='/api/phone/qr?t='+Date.now();
-    $('#phurl').textContent=d.active?d.url:'This port is busy, so the phone link is off. Choose another port.';
-    $('#phon').checked=d.pw_on;$('#phpin').value=d.pin;$('#phport').value=d.port;
+    phUrl=d.url;
+    if(phTab==='lan'||first){
+      $('#phqr').src='/api/phone/qr?t='+Date.now();
+      $('#phurl').textContent=d.active?d.url:'This port is busy, so the phone link is off. Choose another port.';
+      $('#phon').checked=d.pw_on;$('#phpin').value=d.pin;$('#phport').value=d.port;
+    }
+    ntFill(d,first);
+    if(d.net&&d.net.state==='starting'&&!$('#phpanel').hidden)phPoll=setTimeout(()=>phLoad(),1000);
   }catch{$('#phurl').textContent='Could not read phone settings'}
 }
-$('#bph').onclick=e=>{e.stopPropagation();$('#numpanel').hidden=true;const p=$('#phpanel');p.hidden=!p.hidden;if(!p.hidden)phLoad()};
+$('#bph').onclick=e=>{e.stopPropagation();$('#numpanel').hidden=true;const p=$('#phpanel');p.hidden=!p.hidden;if(!p.hidden)phLoad(true);else clearTimeout(phPoll)};
+$('#nton').onchange=async()=>{
+  const on=$('#nton').checked;$('#nton').disabled=true;
+  try{await api('/api/phone/net',{method:'POST',headers:JH,body:JSON.stringify({on})})}catch{}
+  phLoad();
+};
+$('#ntnew').onclick=async()=>{
+  $('#ntbody').hidden=true;ntUrl='';
+  try{await api('/api/phone/net',{method:'POST',headers:JH,body:JSON.stringify({on:true,new:true})})}catch{}
+  phLoad();
+};
+$('#ntcopy').onclick=()=>{navigator.clipboard&&navigator.clipboard.writeText(ntUrl);$('#ntcopy').textContent='Copied ✓';setTimeout(()=>$('#ntcopy').textContent='Copy link',1500)};
+$('#ntpwon').onchange=()=>{$('#ntwarn').hidden=!($('#nton').checked&&!$('#ntpwon').checked)};
+$('#ntsave').onclick=async()=>{
+  try{
+    const r=await api('/api/phone/set',{method:'POST',headers:JH,body:JSON.stringify({net_pw_on:$('#ntpwon').checked,net_pin:$('#ntpin').value})});
+    const d=await r.json();
+    $('#ntmsg').textContent=r.ok?'Saved ✓':d.error;
+    if(r.ok)phLoad(true);
+  }catch(e){$('#ntmsg').textContent='Could not save'}
+};
 $('#phcopy').onclick=()=>{navigator.clipboard&&navigator.clipboard.writeText(phUrl);$('#phcopy').textContent='Copied ✓';setTimeout(()=>$('#phcopy').textContent='Copy link',1500)};
 $('#phsave').onclick=async()=>{
   try{
