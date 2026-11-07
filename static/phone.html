@@ -181,12 +181,13 @@ function up(f,i,n){return new Promise(res=>{
   const fd=new FormData();fd.append('file',f);x.send(fd);
 })}
 
+const live=f=>Array.from({length:f.pages},(_,i)=>i).filter(i=>!(f.gone||[]).includes(i));   // pages not removed on the PC
 function render(){
   const L=$('#list');L.innerHTML='';
   FILES.forEach((f,k)=>{
-    const meta=f.kind==='pdf'?`PDF · ${f.pages} page${f.pages>1?'s':''}`:'Image';
+    const nl=live(f).length,meta=f.kind==='pdf'?`PDF · ${nl} page${nl>1?'s':''}`:'Image';
     const b=el('button',{className:'p',textContent:'🖨 Print'});
-    b.onclick=()=>openPrint(f.name,Array.from({length:f.pages},(_,i)=>({f:f.id,p:i,land:f.lands[i],label:'Page '+(i+1)})));
+    b.onclick=()=>openPrint(f.name,live(f).map((i,j)=>({f:f.id,p:i,land:f.lands[i],label:'Page '+(j+1)})));
     const mv=(d,t,dis)=>{const x=el('button',{className:'s',textContent:t,disabled:dis});x.onclick=async()=>{await api('/api/move',{method:'POST',headers:JH,body:JSON.stringify({id:f.id,dir:d})});loadFiles()};return x};
     const d=el('button',{className:'x',textContent:'✕'});
     d.onclick=async()=>{await api('/api/files/'+f.id,{method:'DELETE'});loadFiles()};
@@ -199,15 +200,15 @@ function render(){
   $('#all').hidden=!FILES.length;
   const A=$('#allbtns');A.innerHTML='';
   if(FILES.length){
-    const tot=FILES.reduce((a,f)=>a+f.pages,0);
+    const tot=FILES.reduce((a,f)=>a+live(f).length,0);
     const b=el('button',{className:'p',textContent:`🖨 Print all (${tot} page${tot>1?'s':''})`});
-    b.onclick=()=>{let n=0,pages=[];FILES.forEach(f=>{for(let i=0;i<f.pages;i++){n++;pages.push({f:f.id,p:i,land:f.lands[i],label:`${n}. ${f.name}${f.pages>1?' (p'+(i+1)+')':''}`})}});openPrint('All files',pages)};
+    b.onclick=()=>{let n=0,pages=[];FILES.forEach(f=>{const lv=live(f);lv.forEach((i,j)=>{n++;pages.push({f:f.id,p:i,land:f.lands[i],label:`${n}. ${f.name}${lv.length>1?' (p'+(j+1)+')':''}`})})});openPrint('All files',pages)};
     A.append(b);
   }
 }
 function readFile(f){
   $('#rdtitle').textContent=f.name;const b=$('#rdb');b.innerHTML='';
-  for(let i=0;i<f.pages;i++)b.append(el('img',{loading:'lazy',alt:'',src:`/api/view?f=${f.id}&p=${i}&q=2${numQS()}&v=${REV}`}));
+  live(f).forEach(i=>b.append(el('img',{loading:'lazy',alt:'',src:`/api/view?f=${f.id}&p=${i}&q=2${numQS()}&v=${REV}`})));
   $('#rd').hidden=false;
 }
 $('#rdclose').onclick=()=>{$('#rd').hidden=true;$('#rdb').innerHTML=''};
