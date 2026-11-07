@@ -1432,6 +1432,12 @@ async function pageRotate(deg){
   TFSCROLL=$('#pvstage').scrollTop;pvRender();
 }
 
+document.addEventListener('keydown',e=>{   // Transform off: R / Shift+R turns the page under the mouse
+  if(TF.on||STEP!==2)return;
+  const t=e.target;if(t&&/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)&&t.type!=='checkbox')return;
+  if(e.key.toLowerCase()==='r'&&!e.ctrlKey&&!e.altKey&&!e.metaKey){e.preventDefault();pageRotate(e.shiftKey?-90:90)}
+});
+
 /* ---- put another picture on the same page: drop, paste, or the Add button ---- */
 function tfPoint(box,ev){
   const r=box._ui.getBoundingClientRect(),kx=r.width/TFA.aw;
