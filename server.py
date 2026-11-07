@@ -15,6 +15,7 @@ app = Flask(__name__, static_folder=None)
 app.secret_key = os.urandom(24)
 FILES = {}
 ORDER = []
+GONE = {}   # file id -> set of page numbers removed with the red cross (shared by PC and phone)
 JOBS = {}
 LOCK = threading.Lock()    # fitz is not thread safe
 SLOCK = threading.Lock()   # file list changes
@@ -406,7 +407,8 @@ def register(paths, sort=True):
 
 
 def pub(f):
-    return {"id": f["id"], "name": f["name"], "kind": f["kind"], "pages": f["pages"], "lands": f["lands"]}
+    return {"id": f["id"], "name": f["name"], "kind": f["kind"], "pages": f["pages"], "lands": f["lands"],
+            "gone": sorted(GONE.get(f["id"], ()))}
 
 
 @app.get("/")
@@ -620,9 +622,34 @@ def state():
 @app.delete("/api/files/<fid>")
 def del_one(fid):
     with SLOCK:
+        GONE.pop(fid, None)
         if FILES.pop(fid, None) is not None and fid in ORDER:
             ORDER.remove(fid)
             bump()
+    return jsonify(ok=True)
+
+
+@app.post("/api/pages/remove")
+def pages_remove():
+    """Remove one page of a file from the list (PC and phone both follow). Removing the last page removes the file."""
+    d = request.get_json(silent=True) or {}
+    fid = str(d.get("f", ""))
+    try:
+        p = int(d.get("p"))
+    except Exception:
+        return jsonify(error="bad page"), 400
+    with SLOCK:
+        f = FILES.get(fid)
+        if not f or not (0 <= p < f["pages"]):
+            return jsonify(ok=True)
+        g = GONE.setdefault(fid, set())
+        g.add(p)
+        if len(g) >= f["pages"]:
+            GONE.pop(fid, None)
+            FILES.pop(fid, None)
+            if fid in ORDER:
+                ORDER.remove(fid)
+        bump()
     return jsonify(ok=True)
 
 
@@ -631,6 +658,7 @@ def del_all():
     with SLOCK:
         FILES.clear()
         ORDER.clear()
+        GONE.clear()
         bump()
     return jsonify(ok=True)
 
@@ -686,9 +714,12 @@ def gnum(fid, p):
         f = FILES.get(i)
         if not f:
             continue
+        gone = GONE.get(i, ())
         if i == fid:
-            return n + p + 1
-        n += f["pages"]
+            if p in gone:
+                return None
+            return n + sum(1 for q in range(p) if q not in gone) + 1
+        n += f["pages"] - len(gone)
     return None
 
 
