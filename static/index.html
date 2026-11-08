@@ -21,8 +21,8 @@ button:disabled,select:disabled{opacity:.45;cursor:default}
 .grow{flex:1;min-width:0}
 .name{font-weight:600;overflow-wrap:anywhere}
 .mut{color:var(--mut);font-size:12.5px}
-.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:10px;margin-bottom:10px}
-h1{font-size:17px;margin:0 6px 0 0;white-space:nowrap}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:10px;margin-bottom:8px}
+h1{font-size:16px;margin:0 6px 0 0;white-space:nowrap}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .field{display:flex;flex-direction:column;gap:3px;margin-bottom:8px;min-width:0}
 .field label{font-size:12px;color:var(--mut)}
@@ -30,7 +30,11 @@ h1{font-size:17px;margin:0 6px 0 0;white-space:nowrap}
 body.s1 .s2only,body.s2 .s1only{display:none!important}
 
 /* ---------- top bar ---------- */
-#bar{flex:none;z-index:8;background:var(--card);padding:8px 14px;border-bottom:1px solid var(--bd)}
+#bar{flex:none;z-index:8;background:var(--card);padding:5px 10px;border-bottom:1px solid var(--bd)}
+#bar .row{gap:6px}
+#bar button{padding:5px 10px}
+#bar h1{font-size:15px;margin:0 4px 0 2px}
+#bar .zg button.s{padding:5px 9px}
 #bar button,#bar label{white-space:nowrap}
 .zg{display:flex;gap:4px;align-items:center}
 .zg #rz{min-width:56px}
@@ -42,9 +46,12 @@ body.s1 .s2only,body.s2 .s1only{display:none!important}
 .sw::after{content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:#fff;transition:transform .15s}
 .sw:checked{background:var(--pri)}.sw:checked::after{transform:translateX(16px)}.sw:disabled{opacity:.5;cursor:default}
 
+@media(max-width:1500px){#stepname{display:none}}
+@media(max-width:1400px){#bar .lbl{display:none}}
+
 /* ---------- layout: sliding side panel + full stage ---------- */
 .main{flex:1;min-height:0;display:flex;position:relative;overflow:hidden}
-.side{flex:none;overflow:auto;padding:12px;background:var(--card);border-right:1px solid var(--bd);transition:margin-left .25s ease}
+.side{flex:none;overflow:auto;padding:10px;background:var(--card);border-right:1px solid var(--bd);transition:margin-left .25s ease}
 #sideA{width:var(--lw,320px)}
 #sideB{width:var(--rw,320px);border-right:0;border-left:1px solid var(--bd)}
 .main.collapsed #sideA{margin-left:calc(-1*var(--lw,320px) - 1px)}
@@ -91,11 +98,11 @@ body.rszing{cursor:col-resize;user-select:none;-webkit-user-select:none}
 .fdet summary{cursor:pointer;font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--mut);margin:4px 0 8px;font-weight:600}
 
 /* ---------- step 2: preview + status ---------- */
-.pvstage{flex:1;min-height:0;overflow:auto;padding:14px}
-.pvrow{display:flex;gap:14px;justify-content:center;margin:0 auto 18px;width:max-content;min-width:100%}
+.pvstage{flex:1;min-height:0;overflow:auto;padding:8px}
+.pvrow{display:flex;gap:10px;justify-content:center;margin:0 auto 8px;width:max-content;min-width:100%}
 .pvsheet{flex:0 0 auto;text-align:center}
 .pvsheet img{width:100%;display:block;border-radius:3px;box-shadow:0 2px 14px rgba(0,0,0,.4);background:#fff;min-height:120px}
-.pvsheet small{display:block;margin-top:4px}
+.pvsheet small{display:block;margin-top:2px;font-size:11.5px}
 .pill{position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:5;background:#111;color:#fff;padding:9px 18px;border-radius:22px;font-weight:600;box-shadow:0 4px 16px rgba(0,0,0,.4);cursor:pointer;max-width:90%}
 .pill.ok{background:#15803d}.pill.err{background:#b91c1c}
 .lg{display:inline-block;width:12px;height:12px;vertical-align:-1px;margin-right:4px;border-radius:2px}
@@ -113,11 +120,11 @@ body.rszing{cursor:col-resize;user-select:none;-webkit-user-select:none}
 .pvsheet .tfclip img.tfi{position:absolute;display:block;max-width:none;min-height:0;border-radius:0;box-shadow:none;background:none;pointer-events:none}
 .tfh{position:absolute;cursor:move}
 .tfdragging .tfh{pointer-events:none!important}
-.tfcap{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:4px}
+.tfcap{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:2px}
 .tfcap small{margin:0!important}
-.tfcap .tfxp{padding:2px 9px;border-radius:8px;font-size:12px;color:#dc2626;line-height:1.4}
-.tfplus{display:flex;justify-content:center;margin:2px 0}
-.tfplus button{width:34px;height:34px;border-radius:50%;font-size:20px;line-height:1;padding:0;display:flex;align-items:center;justify-content:center;color:var(--pri)}
+.tfcap .tfxp{padding:1px 8px;border-radius:7px;font-size:11.5px;color:#dc2626;line-height:1.4;height:auto}
+.tfplus{display:flex;justify-content:center;margin:1px 0}
+.tfplus button{width:22px;height:22px;border-radius:50%;font-size:15px;line-height:1;padding:0;display:flex;align-items:center;justify-content:center;color:var(--pri)}
 .tfbox.tfsrc{z-index:20}
 .tfbox.tfdrop::after{content:'';position:absolute;inset:0;outline:3px solid var(--pri);outline-offset:-3px;background:rgba(37,99,235,.08);pointer-events:none;z-index:5}
 .tfempty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:12px;color:#9aa0aa;font-size:13px;pointer-events:none}
@@ -125,29 +132,35 @@ body.rszing{cursor:col-resize;user-select:none;-webkit-user-select:none}
 .tfh.sel{outline:2px solid var(--pri)}
 .tfh .hd{position:absolute;width:11px;height:11px;margin:-6px 0 0 -6px;background:#fff;border:2px solid var(--pri);border-radius:2px;z-index:2}
 
-/* bottom dock */
-#tfdock{position:relative;flex:none;margin:0 12px 12px;padding:10px 12px;background:var(--card);border:1px solid var(--bd);border-radius:14px;box-shadow:0 6px 24px rgba(0,0,0,.28);display:flex;flex-direction:column;gap:10px}
-.tfrow{display:flex;flex-wrap:wrap;gap:6px 8px;align-items:center}
-.tbtn{display:inline-flex;align-items:center;gap:6px;padding:6px 11px;border-radius:10px;font-size:13px;white-space:nowrap}
-.tbtn kbd{font:600 10.5px ui-monospace,Consolas,monospace;border:1px solid var(--bd);border-bottom-width:2px;border-radius:5px;padding:0 5px;color:var(--mut);background:var(--bg)}
+/* bottom dock: a slim strip under the page, always the same height (no layout jumps) */
+#tfdock{position:relative;flex:none;container-type:inline-size;padding:6px 10px;background:var(--card);border-top:1px solid var(--bd);display:flex;flex-direction:column;gap:6px}
+.tfrow{display:flex;gap:5px;align-items:center;flex-wrap:nowrap;min-width:0}
+.tbtn{display:inline-flex;align-items:center;gap:5px;padding:4px 9px;border-radius:8px;font-size:12.5px;white-space:nowrap}
+.tfrow .tbtn{height:30px;flex:none}
+.tbtn kbd{font:600 10px ui-monospace,Consolas,monospace;border:1px solid var(--bd);border-bottom-width:2px;border-radius:4px;padding:0 4px;color:var(--mut);background:var(--bg)}
 .tbtn.dng{color:#dc2626}
-.tfright{display:flex;gap:8px;margin-left:auto}
-.tsep{width:1px;height:22px;background:var(--bd);margin:0 4px}
-.tfedit{min-height:50px;padding-top:10px;border-top:1px solid var(--bd);align-items:flex-end}
-#tfflds{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:flex-end}
-.tfg{display:flex;flex-direction:column;gap:3px}
-.tfg .gl{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);font-weight:600}
-.tfg .rr{display:flex;gap:6px;align-items:flex-end}
-.tfg .fl{display:flex;flex-direction:column;gap:2px}
-.tfg .fl label{font-size:11px;color:var(--mut)}
-.tfg input{width:78px;padding:5px 7px;text-align:right}
+.tfright{display:flex;gap:5px;margin-left:auto}
+.tsep{width:1px;height:20px;background:var(--bd);margin:0 3px;flex:none}
+.tfedit{height:30px;padding:0;border:0;gap:12px;overflow:hidden}
+#tfhint{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;font-size:12px}
+#tfflds{display:flex;flex-wrap:nowrap;gap:4px 14px;align-items:center}
+.tfg{display:flex;flex-direction:row;align-items:center;gap:6px}
+.tfg .gl{display:none}
+.tfg .rr{display:flex;gap:5px;align-items:center}
+.tfg .fl{display:flex;flex-direction:row;align-items:center;gap:4px}
+.tfg .fl label{font-size:11.5px;color:var(--mut);font-weight:600}
+.tfg input{width:74px;height:28px;padding:2px 6px;text-align:right;border-radius:7px}
 .tfg input:disabled{opacity:.4}
-.lockb{padding:5px 8px;font-size:13px;opacity:.6}
+.lockb{padding:2px 6px;height:28px;font-size:12px;opacity:.6}
 .lockb.on{opacity:1;border-color:var(--pri);background:var(--hov)}
-.seg{display:inline-flex;border:1px solid var(--bd);border-radius:9px;overflow:hidden;align-self:flex-end}
-.seg button{border:0;border-radius:0;padding:5px 11px;background:transparent}
+.seg{display:inline-flex;border:1px solid var(--bd);border-radius:8px;overflow:hidden;align-self:center}
+.seg button{border:0;border-radius:0;padding:3px 9px;background:transparent;font-size:12px;height:26px}
 .seg button.on{background:var(--pri);color:#fff}
-.pillb{background:var(--pri);color:#fff;border-radius:12px;padding:3px 11px;font-size:12.5px;font-weight:600;align-self:center}
+.pillb{background:var(--pri);color:#fff;border-radius:12px;padding:3px 11px;font-size:12.5px;font-weight:600;align-self:center;white-space:nowrap}
+@container (max-width:860px){
+  .tfrow .tbtn .t,.tfrow .tbtn kbd{display:none}
+  .tfrow .tbtn{padding:4px 8px}
+}
 .tfhelp{position:absolute;right:0;bottom:calc(100% + 8px);width:370px;max-width:92%;z-index:12;background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:12px 14px;box-shadow:0 8px 30px rgba(0,0,0,.4);font-size:12.5px}
 .tfhelp div{display:flex;justify-content:space-between;gap:12px;padding:3px 0;border-bottom:1px solid var(--bd)}
 .tfhelp div:last-child{border:0}
@@ -177,10 +190,10 @@ body.rszing{cursor:col-resize;user-select:none;-webkit-user-select:none}
 
   <span class="row" style="gap:6px">
     <button id="add" class="p">＋ Add files</button>
-    <button id="bpaste" title="Paste copied files or a copied picture (Ctrl+V)">📋 Paste</button>
+    <button id="bpaste" title="Paste copied files or a copied picture (Ctrl+V)">📋<span class="lbl"> Paste</span></button>
   </span>
   <div class="dd">
-    <button id="bnum">🔢 Page numbers</button>
+    <button id="bnum" title="Page numbers">🔢<span class="lbl"> Page numbers</span></button>
     <div id="numpanel" class="card pop" hidden>
       <label class="row"><input type="checkbox" id="numon"> <span class="name">Add page numbers to all pages</span></label>
       <p class="mut">Printed directly on the page in Times New Roman. All files count as one document (1, 2, 3…).</p>
@@ -202,7 +215,7 @@ body.rszing{cursor:col-resize;user-select:none;-webkit-user-select:none}
   </div>
 
   <div class="dd">
-    <button id="bph" title="Connect a phone (QR code)">📱 Phone</button>
+    <button id="bph" title="Connect a phone (QR code)">📱<span class="lbl"> Phone</span></button>
     <div id="phpanel" class="card pop" hidden>
       <div class="seg phtabs"><button id="phtl" class="on">Same Wi-Fi</button><button id="phtn">Internet</button></div>
       <div id="phlan">
@@ -239,7 +252,7 @@ body.rszing{cursor:col-resize;user-select:none;-webkit-user-select:none}
     <button id="zout" class="s" title="Zoom out (Ctrl + wheel)">−</button>
     <button id="rz" class="s" title="Reset zoom (Ctrl+0)">100%</button>
     <button id="zin" class="s" title="Zoom in (Ctrl + wheel)">＋</button>
-    <button id="rfit" class="s" title="Fit one whole page on the screen">⤢ Fit page</button>
+    <button id="rfit" class="s" title="Fit one whole page on the screen">⤢<span class="lbl"> Fit page</span></button>
   </span>
   <button id="btf" class="s s2only" title="Free layout: move, resize, rotate and copy pictures anywhere on the sheet">✥ Transform</button>
 
@@ -252,10 +265,10 @@ body.rszing{cursor:col-resize;user-select:none;-webkit-user-select:none}
       <p class="mut" id="updver"></p>
       <div class="row"><button id="updcheck" class="s">Check for updates now</button><button id="updnow" class="p s" hidden>Update now…</button></div>
       <p class="mut" id="updmsg"></p>
+      <label id="autolbl" class="row" hidden title="Open PC Print minimized when Windows starts" style="margin-top:6px;border-top:1px solid var(--bd);padding-top:8px"><input type="checkbox" id="auto"> <span class="name">Start with Windows</span></label>
     </div>
   </div>
-  <label id="autolbl" class="row mut" hidden title="Open PC Print minimized when Windows starts"><input type="checkbox" id="auto"> Start with Windows</label>
-  <button id="bopen" class="p s1only">Preview &amp; Print →</button>
+    <button id="bopen" class="p s1only">Preview &amp; Print →</button>
   <button id="close" class="s2only">← Back to pages</button>
   <button id="bprint" class="p s2only">🖨 Print</button>
 </div></div>
@@ -296,38 +309,38 @@ body.rszing{cursor:col-resize;user-select:none;-webkit-user-select:none}
     <div class="pvstage" id="pvstage"></div>
     <div id="tfdock" hidden>
       <div class="tfrow">
-        <button id="tfAdd" class="tbtn p" title="Add another picture to this page (you can also drop or paste it onto the sheet)">＋ Add picture</button>
+        <button id="tfAdd" class="tbtn p" title="Add another picture to this page (you can also drop or paste it onto the sheet)">＋ Picture</button>
         <button id="tfPaste" class="tbtn" title="Paste a copied picture onto this page (Ctrl+V)" aria-label="Paste">📋</button>
-        <button id="tfPage" class="tbtn" title="Add a new blank page after the current one">＋ Add page</button>
+        <button id="tfPage" class="tbtn" title="Add a new blank page after the current one">＋ Page</button>
         <span class="tsep"></span>
-        <button id="tfAll" class="tbtn" title="Select every picture on this page (Ctrl+A)">☑ All</button>
-        <button id="tfDup" class="tbtn" title="Duplicate the selected pictures on this page (Ctrl+D, or hold Alt and drag). Ctrl+C / Ctrl+X / Ctrl+V copy, cut and paste between pages.">⧉ Copy</button>
-        <button id="tfRot90" class="tbtn" title="Rotate 90° clockwise (Shift+R = back)">⟳ Rotate 90° <kbd>R</kbd></button>
-        <button id="tfCenter" class="tbtn" title="Center on the page">⌖ Center</button>
+        <button id="tfAll" class="tbtn" title="Select every picture on this page (Ctrl+A)">☑<span class="t"> All</span></button>
+        <button id="tfDup" class="tbtn" title="Duplicate the selected pictures on this page (Ctrl+D, or hold Alt and drag). Ctrl+C / Ctrl+X / Ctrl+V copy, cut and paste between pages.">⧉<span class="t"> Copy</span></button>
+        <button id="tfRot90" class="tbtn" title="Rotate 90° clockwise (R, Shift+R = back)">⟳<span class="t"> Rotate 90°</span> <kbd>R</kbd></button>
+        <button id="tfCenter" class="tbtn" title="Center on the page">⌖<span class="t"> Center</span></button>
         <button id="tfDel" class="tbtn dng" title="Delete the selected pictures (Delete key)">🗑</button>
         <span class="tfright">
-          <button id="tfReset" class="tbtn" title="Put this page back to the normal layout">↺ Reset page</button>
-          <button id="tfResetAll" class="tbtn" title="Put every page back to the normal layout">Reset all</button>
+          <button id="tfReset" class="tbtn" title="Reset page: put this page back to the normal layout">↺<span class="t"> Reset page</span></button>
+          <button id="tfResetAll" class="tbtn" title="Reset all: put every page back to the normal layout">⟲<span class="t"> Reset all</span></button>
           <button id="tfHelpB" class="tbtn" title="Mouse and keyboard shortcuts">?</button>
         </span>
       </div>
       <div class="tfrow tfedit">
-        <span id="tfhint" class="mut">Click a picture to edit it · Ctrl+click selects several · Alt+drag copies · R rotates 90°</span>
+        <span id="tfhint" class="mut">Click a picture to edit it · Ctrl+click = several · Alt+drag = copy · R = rotate</span>
         <div id="tfflds" hidden>
-          <div class="tfg"><span class="gl">Size</span>
+          <div class="tfg" title="Size">
             <div class="rr">
-              <div class="fl"><label>Width</label><input id="tfW" type="number" step="any" min="0"></div>
+              <div class="fl"><label title="Width">W</label><input id="tfW" type="number" step="any" min="0" title="Width"></div>
               <button id="tfLockB" class="lockb" title="Keep proportions when typing a size">🔒</button>
-              <div class="fl"><label>Height</label><input id="tfH" type="number" step="any" min="0"></div>
+              <div class="fl"><label title="Height">H</label><input id="tfH" type="number" step="any" min="0" title="Height"></div>
               <div class="seg" id="tfSeg"><button data-u="in">in</button><button data-u="cm">cm</button><button data-u="mm">mm</button></div>
             </div></div>
-          <div class="tfg"><span class="gl">Position (center)</span>
+          <div class="tfg" title="Position (center of the picture)">
             <div class="rr">
               <div class="fl"><label>X</label><input id="tfX" type="number" step="any"></div>
               <div class="fl"><label>Y</label><input id="tfY" type="number" step="any"></div>
             </div></div>
-          <div class="tfg"><span class="gl">Rotation</span>
-            <div class="rr"><div class="fl"><label>Degrees</label><input id="tfR" type="number" step="any"></div></div></div>
+          <div class="tfg" title="Rotation in degrees">
+            <div class="rr"><div class="fl"><label>Rot°</label><input id="tfR" type="number" step="any"></div></div></div>
           <span id="tfcount" class="pillb" hidden></span>
         </div>
       </div>
@@ -987,7 +1000,7 @@ function pvRefresh(){clearTimeout(pvT);pvT=setTimeout(pvRender,250)}
   pvRefresh();
 }));
 function pvSheetW(){
-  const st=$('#pvstage'),sw=(st.clientWidth||600)-44,sh=(st.clientHeight||600)-70;
+  const st=$('#pvstage'),sw=(st.clientWidth||600)-24,sh=(st.clientHeight||600)-(TF.on?92:46);   // 92 = padding + caption + the two small + buttons
   const ratio=orient()==='landscape'?0.707:1.414;
   const per=dupOn()?(sw-14)/2:sw;
   return Math.max(120,Math.min(per,sh/ratio))*PZ;
