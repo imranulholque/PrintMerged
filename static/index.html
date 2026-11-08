@@ -35,6 +35,9 @@ body.s1 .s2only,body.s2 .s1only{display:none!important}
 #bar button{padding:5px 10px}
 #bar h1{font-size:15px;margin:0 4px 0 2px}
 #bar .zg button.s{padding:5px 9px}
+#svdd{display:flex;gap:0;align-items:center}
+#svdd #bsave{border-top-right-radius:0;border-bottom-right-radius:0;border-right:0}
+#svdd #bsdir{border-top-left-radius:0;border-bottom-left-radius:0;padding:5px 8px}
 #bar button,#bar label{white-space:nowrap}
 .zg{display:flex;gap:4px;align-items:center}
 .zg #rz{min-width:56px}
@@ -270,6 +273,17 @@ body.rszing{cursor:col-resize;user-select:none;-webkit-user-select:none}
   </div>
     <button id="bopen" class="p s1only">Preview &amp; Print →</button>
   <button id="close" class="s2only">← Back to pages</button>
+  <div class="dd s2only" id="svdd">
+    <button id="bsave" title="Save all selected pages, in this order, with page numbers and your Transform changes, as one PDF in your save folder">💾 Save PDF</button>
+    <button id="bsdir" class="s" title="Choose the save folder / file name">📁</button>
+    <div id="svpanel" class="card pop" hidden style="left:auto;right:0">
+      <div class="name">Save PDF to</div>
+      <p class="mut" id="svdir" style="word-break:break-all;margin:6px 0">No folder chosen yet.</p>
+      <div class="row"><button id="svchange" class="s p">Choose folder…</button><button id="svopen" class="s">Open folder</button></div>
+      <div class="field" style="margin-top:10px"><label>File name (empty = automatic)</label><input id="svname" type="text" autocomplete="off" spellcheck="false" placeholder="e.g. Application merged"></div>
+      <p class="mut">Every page you ticked is saved in the same order as it prints, with the page numbers and everything you changed in Transform. Next time it saves straight into this folder.</p>
+    </div>
+  </div>
   <button id="bprint" class="p s2only">🖨 Print</button>
 </div></div>
 
@@ -325,7 +339,7 @@ body.rszing{cursor:col-resize;user-select:none;-webkit-user-select:none}
         </span>
       </div>
       <div class="tfrow tfedit">
-        <span id="tfhint" class="mut">Click a picture to edit it · Ctrl+click = several · Alt+drag = copy · R = rotate</span>
+        <span id="tfhint" class="mut">Click a picture to edit it · Ctrl+click = several · Alt+drag = copy · Shift+drag = straight · R = rotate</span>
         <div id="tfflds" hidden>
           <div class="tfg" title="Size">
             <div class="rr">
@@ -350,6 +364,7 @@ body.rszing{cursor:col-resize;user-select:none;-webkit-user-select:none}
         <div><b>Ctrl + A</b><span>select all on this page</span></div>
         <div><b>Drag</b><span>move (all selected together)</span></div>
         <div><b>Alt + drag</b><span>copy (all selected together)</span></div>
+        <div><b>Shift + drag</b><span>move / copy dead straight (sideways, up / down, diagonal)</span></div>
         <div><b>Corner handles</b><span>resize · Shift = free shape</span></div>
         <div><b>R / Shift + R</b><span>rotate 90° clockwise / back</span></div>
         <div><b>Arrow keys</b><span>nudge 1 mm · Shift = 10 mm</span></div>
@@ -444,7 +459,7 @@ const JH={'Content-Type':'application/json'};
 function el(t,props={},...kids){const e=document.createElement(t);Object.assign(e,props);kids.forEach(k=>e.append(k));return e}
 async function api(url,opt){return fetch(url,opt)}
 let tT=null;
-function toast(t){const b=$('#toast');b.textContent=t;b.hidden=false;b.style.bottom=(typeof TF!=='undefined'&&TF.on&&STEP===2)?'190px':'';clearTimeout(tT);tT=setTimeout(()=>b.hidden=true,4500)}
+function toast(t){const b=$('#toast');b.textContent=t;b.hidden=false;b.style.bottom=(typeof TF!=='undefined'&&TF.on&&STEP===2)?'100px':'';clearTimeout(tT);tT=setTimeout(()=>b.hidden=true,4500)}
 const key=(f,p)=>f+':'+p;
 
 /* ---------------- page list helpers ---------------- */
@@ -793,8 +808,8 @@ function numChanged(){
   clearTimeout(numT);numT=setTimeout(()=>{renderPages();if(STEP===2)pvRefresh()},300);
 }
 ['#numon','#numpos','#numalign','#numsize','#numstart','#nummargin','#numbold'].forEach(id=>$(id).addEventListener('input',numChanged));
-$('#bnum').onclick=e=>{e.stopPropagation();$('#phpanel').hidden=true;$('#updpanel').hidden=true;$('#numpanel').hidden=!$('#numpanel').hidden};
-document.addEventListener('click',e=>{if(!e.target.closest('.dd')){$('#numpanel').hidden=true;$('#phpanel').hidden=true;$('#updpanel').hidden=true}});
+$('#bnum').onclick=e=>{e.stopPropagation();$('#svpanel').hidden=true;$('#phpanel').hidden=true;$('#updpanel').hidden=true;$('#numpanel').hidden=!$('#numpanel').hidden};
+document.addEventListener('click',e=>{if(!e.target.closest('.dd')){$('#numpanel').hidden=true;$('#phpanel').hidden=true;$('#updpanel').hidden=true;$('#svpanel').hidden=true}});
 /* ---------------- phone connection ---------------- */
 let phUrl='',ntUrl='',phTab='lan',phPoll=null;
 function phTabSet(t){
@@ -830,7 +845,7 @@ async function phLoad(first){
     if(d.net&&d.net.state==='starting'&&!$('#phpanel').hidden)phPoll=setTimeout(()=>phLoad(),1000);
   }catch{$('#phurl').textContent='Could not read phone settings'}
 }
-$('#bph').onclick=e=>{e.stopPropagation();$('#numpanel').hidden=true;$('#updpanel').hidden=true;const p=$('#phpanel');p.hidden=!p.hidden;if(!p.hidden)phLoad(true);else clearTimeout(phPoll)};
+$('#bph').onclick=e=>{e.stopPropagation();$('#svpanel').hidden=true;$('#numpanel').hidden=true;$('#updpanel').hidden=true;const p=$('#phpanel');p.hidden=!p.hidden;if(!p.hidden)phLoad(true);else clearTimeout(phPoll)};
 $('#nton').onchange=async()=>{
   const on=$('#nton').checked;$('#nton').disabled=true;
   try{await api('/api/phone/net',{method:'POST',headers:JH,body:JSON.stringify({on})})}catch{}
@@ -1050,24 +1065,31 @@ document.addEventListener('keydown',e=>{
 });
 
 /* ---- print (status shows on this same page) ---- */
-$('#bprint').onclick=async()=>{
-  const s=selPages();if(!s.length)return toast('Tick at least one page to print');
-  if(!CAPS||CAPS.error)return toast('Select a printer first');
+/* what Print and Save PDF both send: the same pages, order, settings, page numbers and Transform layout */
+function buildJob(s){
+  const pp=CAPS&&CAPS.papers?CAPS.papers.find(x=>x.name===$('#paper').value):null;
   const copies=Math.max(1,Math.min(99,parseInt($('#copies').value)||1));
   const body={printer:$('#printer').value,paper:$('#paper').value,color:$('#color').value,
-    duplex:CAPS.duplex?$('#duplex').value:'off',orient:orient(),copies,
+    duplex:CAPS&&CAPS.duplex?$('#duplex').value:'off',orient:orient(),copies,
     profile:$('#profile').value||'',scale:$('#scale').value,pct:setPct($('#pct').value),
+    w:(pp&&pp.w)||210,h:(pp&&pp.h)||297,
     num:NUM,pages:s.map(p=>[p.f,p.p]),title:jobTitle(s)};
   if(tfActive()){   // free layout from the Transform tool (kept even when the Transform button is switched off)
     const lay={},sh=tfSheets(s);
     body.pages=sh.map(p=>p.extra?[p.f,p.p,p.k]:[p.f,p.p]);
     for(const p of sh){
       const L=LAY[kk(p)];
-      if(!L)return toast('The layout is still loading. Try again in a moment.');
+      if(!L){toast('The layout is still loading. Try again in a moment.');return null}
       lay[kk(p)]=L.items.map(i=>({cx:i.cx,cy:i.cy,w:i.w,h:i.h,rot:i.rot,f:i.f,p:i.p}));
     }
     body.layout=lay;
   }
+  return body;
+}
+$('#bprint').onclick=async()=>{
+  const s=selPages();if(!s.length)return toast('Tick at least one page to print');
+  if(!CAPS||CAPS.error)return toast('Select a printer first');
+  const body=buildJob(s);if(!body)return;
   $('#bprint').disabled=true;
   msg('Sending…');
   try{
@@ -1084,6 +1106,50 @@ async function poll(id){
   else if(j.state==='done'){msg('✓ Sent to printer');$('#bprint').disabled=false}
   else{msg('Error: '+j.error);$('#bprint').disabled=false}
 }
+
+/* ---- save the merged result as one PDF in the chosen folder ---- */
+const SV={dir:''};
+function svShow(){$('#svdir').textContent=SV.dir||'No folder chosen yet.';$('#svopen').disabled=!SV.dir;$('#bsdir').title=SV.dir?'Save folder: '+SV.dir:'Choose the save folder / file name'}
+async function svLoad(){try{SV.dir=(await (await api('/api/savedir')).json()).dir||''}catch{}svShow()}
+async function svPick(){
+  msg('Choose the folder in the window that opened…');
+  let j;try{j=await (await api('/api/savedir',{method:'POST',headers:JH,body:JSON.stringify({pick:true})})).json()}catch(e){msg('Error: '+e.message);return false}
+  msg('');
+  if(j.error){msg('Error: '+j.error);return false}
+  if(j.dir)SV.dir=j.dir;svShow();
+  return !j.cancelled&&!!SV.dir;
+}
+function svAutoName(s){
+  const names=[...new Set(s.map(p=>p.name))],base=(names[0]||'Merged').replace(/\.[^.]+$/,'');
+  const d=new Date(),z=n=>String(n).padStart(2,'0');
+  return base+(names.length>1?' +'+(names.length-1):'')+' merged '+d.getFullYear()+'-'+z(d.getMonth()+1)+'-'+z(d.getDate())+' '+z(d.getHours())+'-'+z(d.getMinutes())+'-'+z(d.getSeconds());
+}
+$('#bsave').onclick=async()=>{
+  const s=selPages();if(!s.length)return toast('Tick at least one page to save');
+  if(!SV.dir&&!await svPick())return;
+  const body=buildJob(s);if(!body)return;
+  body.name=$('#svname').value.trim()||svAutoName(s);
+  $('#bsave').disabled=true;
+  msg('Saving PDF…');
+  try{
+    const r=await api('/api/savepdf',{method:'POST',headers:JH,body:JSON.stringify(body)});
+    const j=await r.json();
+    if(!r.ok){
+      if(j.error==='nodir'){SV.dir='';svShow();$('#bsave').disabled=false;msg('');if(await svPick())$('#bsave').click();return}
+      msg('Error: '+j.error);$('#bsave').disabled=false;return;
+    }
+    svPoll(j.id);
+  }catch(e){msg('Error: '+e.message);$('#bsave').disabled=false}
+};
+async function svPoll(id){
+  let j;try{j=await (await api('/api/job/'+id)).json()}catch(e){msg('Error: '+e.message);$('#bsave').disabled=false;return}
+  if(j.state==='run'){msg(`Saving PDF ${j.done}/${j.total}…`);setTimeout(()=>svPoll(id),500)}
+  else if(j.state==='done'){msg('✓ Saved: '+j.path);$('#bsave').disabled=false}
+  else{msg('Error: '+j.error);$('#bsave').disabled=false}
+}
+$('#bsdir').onclick=e=>{e.stopPropagation();$('#numpanel').hidden=true;$('#phpanel').hidden=true;$('#updpanel').hidden=true;const p=$('#svpanel');p.hidden=!p.hidden;if(!p.hidden)svShow()};
+$('#svchange').onclick=()=>svPick();
+$('#svopen').onclick=async()=>{try{const r=await api('/api/savedir/open',{method:'POST'});if(!r.ok)msg('Error: '+(await r.json()).error)}catch(e){msg('Error: '+e.message)}};
 
 /* ---------------- Transform: move / resize / copy pictures anywhere on the sheet ---------------- */
 /* Off by default. When off, nothing here runs and printing works exactly as before. */
@@ -1232,10 +1298,15 @@ function tfDown(e,box,i){
     if(!e.altKey&&had&&idx.length>1){tfSetSel(k,[i]);tfSelChanged()}
   });
 }
+function snapStraight(dx,dy){   // Shift while dragging: sideways, up / down or exactly diagonal (whichever is closest)
+  if(!dx&&!dy)return[dx,dy];
+  const a=Math.round(Math.atan2(dy,dx)/(Math.PI/4))*(Math.PI/4),ux=Math.cos(a),uy=Math.sin(a),t=dx*ux+dy*uy;
+  return[t*ux,t*uy];
+}
 function tfDrag(e,box,idx,mode,hd,onClick){
   const k=box._k,L=LAY[k],items=idx.map(i=>L.items[i]),os=items.map(it=>({...it}));
   const r=box._ui.getBoundingClientRect(),kx=r.width/TFA.aw;   // screen pixels per mm
-  const x0=e.clientX,y0=e.clientY;let moved=false;
+  const x0=e.clientX,y0=e.clientY;let moved=false,straight=false;
   const mv=ev=>{
     if(!moved&&Math.hypot(ev.clientX-x0,ev.clientY-y0)<3)return;
     if(!moved){
@@ -1243,7 +1314,10 @@ function tfDrag(e,box,idx,mode,hd,onClick){
       if(mode==='move'){document.body.classList.add('tfdragging');box.classList.add('tfsrc');box._clip.style.overflow='visible'}
     }
     moved=true;
-    const dx=(ev.clientX-x0)/kx,dy=(ev.clientY-y0)/kx;
+    let sx=ev.clientX-x0,sy=ev.clientY-y0;
+    straight=mode==='move'&&ev.shiftKey;
+    if(straight)[sx,sy]=snapStraight(sx,sy);          // Shift: moving and copying go dead straight
+    const dx=sx/kx,dy=sy/kx;
     if(mode==='move'){items.forEach((it,t)=>{it.cx=os[t].cx+dx;it.cy=os[t].cy+dy})}
     else{
       const it=items[0],o=os[0];
@@ -1258,13 +1332,13 @@ function tfDrag(e,box,idx,mode,hd,onClick){
     L.touched=true;tfPlaceAll(box);tfSync();
     if(mode==='move'){
       document.querySelectorAll('.tfdrop').forEach(b=>b.classList.remove('tfdrop'));
-      const tb=tfBoxAt(ev);if(tb&&tb!==box)tb.classList.add('tfdrop');
+      const tb=straight?null:tfBoxAt(ev);if(tb&&tb!==box)tb.classList.add('tfdrop');   // Shift = stay on this page
       const st=$('#pvstage').getBoundingClientRect();   // scroll when near the top / bottom edge
       if(ev.clientY<st.top+40)$('#pvstage').scrollTop-=18;else if(ev.clientY>st.bottom-40)$('#pvstage').scrollTop+=18;
     }
   };
   const end=(ev,cancel)=>{
-    const tb=(moved&&mode==='move'&&!cancel)?tfBoxAt(ev):null;   // look under the mouse before the dragging state is removed
+    const tb=(moved&&mode==='move'&&!cancel&&!straight)?tfBoxAt(ev):null;   // look under the mouse before the dragging state is removed
     window.removeEventListener('pointermove',mv);window.removeEventListener('pointerup',up);window.removeEventListener('pointercancel',cn);
     document.querySelectorAll('.tfdrop').forEach(b=>b.classList.remove('tfdrop'));
     document.body.classList.remove('tfdragging');box.classList.remove('tfsrc');box._clip.style.overflow='';
@@ -1615,7 +1689,7 @@ function upModal(){
     $('#updprogtxt').textContent=UP.state==='ready'?'Restarting…':`Downloading… ${p}%`+(UP.total?`  (${upSize(UP.done)} of ${upSize(UP.total)})`:'');
   }
 }
-$('#bupd').onclick=e=>{e.stopPropagation();$('#numpanel').hidden=true;$('#phpanel').hidden=true;const p=$('#updpanel');p.hidden=!p.hidden;if(!p.hidden)upLoad()};
+$('#bupd').onclick=e=>{e.stopPropagation();$('#svpanel').hidden=true;$('#numpanel').hidden=true;$('#phpanel').hidden=true;const p=$('#updpanel');p.hidden=!p.hidden;if(!p.hidden)upLoad()};
 $('#updauto').onchange=async()=>{
   const on=$('#updauto').checked;
   try{await api('/api/update/enabled',{method:'POST',headers:JH,body:JSON.stringify({on})});
@@ -1639,7 +1713,7 @@ $('#updgo').onclick=async()=>{
   }catch{$('#updmerr').textContent='Could not start the update.'}
   upLoad();
 };
-(async()=>{initAuto();upLoad();await loadSettings();numNote();await refresh(true);setInterval(refresh,1200)})();
+(async()=>{initAuto();upLoad();svLoad();await loadSettings();numNote();await refresh(true);setInterval(refresh,1200)})();
 </script>
 </body>
 </html>
