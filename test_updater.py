@@ -47,26 +47,26 @@ def main():
 
     # --- stage
     d = tempfile.mkdtemp()
-    make_zip(d + "/a.zip", ["PCPrint.exe"])
-    assert updater.stage(d + "/a.zip", d + "/sa") == os.path.join(d, "sa", "PCPrint.exe")
-    make_zip(d + "/b.zip", ["PCPrint/PCPrint.exe"])
-    assert updater.stage(d + "/b.zip", d + "/sb") == os.path.join(d, "sb", "PCPrint", "PCPrint.exe")
-    make_zip(d + "/c.zip", ["other.txt"])
+    make_zip(os.path.join(d, "a.zip"), ["PCPrint.exe"])
+    assert updater.stage(os.path.join(d, "a.zip"), os.path.join(d, "sa")) == os.path.join(d, "sa", "PCPrint.exe")
+    make_zip(os.path.join(d, "b.zip"), ["PCPrint/PCPrint.exe"])
+    assert updater.stage(os.path.join(d, "b.zip"), os.path.join(d, "sb")) == os.path.join(d, "sb", "PCPrint", "PCPrint.exe")
+    make_zip(os.path.join(d, "c.zip"), ["other.txt"])
     for z, why in (("c.zip", "no exe"),):
         try:
-            updater.stage(d + "/" + z, d + "/sc")
+            updater.stage(os.path.join(d, z), os.path.join(d, "sc"))
             raise SystemExit("accepted zip with " + why)
         except updater.UpdateError:
             pass
-    open(d + "/d.zip", "wb").write(b"not a zip")
+    open(os.path.join(d, "d.zip"), "wb").write(b"not a zip")
     try:
-        updater.stage(d + "/d.zip", d + "/sd")
+        updater.stage(os.path.join(d, "d.zip"), os.path.join(d, "sd"))
         raise SystemExit("accepted a broken zip")
     except updater.UpdateError:
         pass
 
     # --- local fake GitHub: api + download
-    payload = open(d + "/a.zip", "rb").read()
+    payload = open(os.path.join(d, "a.zip"), "rb").read()
     state = {"json": rel(assets=[{"name": updater.ASSET, "browser_download_url": URL}])}
 
     class H(http.server.BaseHTTPRequestHandler):
@@ -108,16 +108,16 @@ def main():
 
     seen = []
     ok_sha = hashlib.sha256(payload).hexdigest()
-    updater.download(base + "/f.zip", d + "/dl.zip", len(payload), ok_sha, lambda a, b: seen.append((a, b)))
-    assert open(d + "/dl.zip", "rb").read() == payload and seen[-1][0] == len(payload)
+    updater.download(base + "/f.zip", os.path.join(d, "dl.zip"), len(payload), ok_sha, lambda a, b: seen.append((a, b)))
+    assert open(os.path.join(d, "dl.zip"), "rb").read() == payload and seen[-1][0] == len(payload)
     for kw, what in (({"sha256": "0" * 64}, "checksum"), ({"size": len(payload) + 1}, "size")):
         try:
-            updater.download(base + "/f.zip", d + "/dl2.zip", **kw)
+            updater.download(base + "/f.zip", os.path.join(d, "dl2.zip"), **kw)
             raise SystemExit("bad %s accepted" % what)
         except updater.UpdateError:
             pass
     try:
-        updater.download(base + "/f.zip", d + "/dl3.zip", cancelled=lambda: True)
+        updater.download(base + "/f.zip", os.path.join(d, "dl3.zip"), cancelled=lambda: True)
         raise SystemExit("cancel ignored")
     except updater.UpdateError as e:
         assert str(e) == "cancelled"
