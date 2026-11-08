@@ -54,7 +54,7 @@ body.s1 .s2only,body.s2 .s1only{display:none!important}
 
 /* ---------- layout: sliding side panel + full stage ---------- */
 .main{flex:1;min-height:0;display:flex;position:relative;overflow:hidden}
-.side{flex:none;overflow:auto;padding:10px;background:var(--card);border-right:1px solid var(--bd);transition:margin-left .25s ease}
+.side{flex:none;overflow:auto;padding:10px;background:var(--card);border-right:1px solid var(--bd);transition:margin-left .25s ease,margin-right .25s ease}
 #sideA{width:var(--lw,320px)}
 #sideB{width:var(--rw,320px);border-right:0;border-left:1px solid var(--bd)}
 .main.collapsed #sideA{margin-left:calc(-1*var(--lw,320px) - 1px)}
@@ -62,6 +62,8 @@ body.s1 .s2only,body.s2 .s1only{display:none!important}
 .rsz:hover,body.rszing .rsz{background:var(--pri);opacity:.55}
 body.rszing{cursor:col-resize;user-select:none;-webkit-user-select:none}
 .main.collapsed #rszL{display:none}
+.main.collapsedR #sideB{margin-right:calc(-1*var(--rw,320px) - 1px)}   /* right panel (Print settings) slides away like the left one */
+.main.collapsedR #rszR{display:none}
 .side h3{margin:0 0 8px;font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--mut)}
 .side p.mut{margin:3px 0;font-size:12px}
 .side p.mut:empty{display:none}
@@ -180,7 +182,7 @@ body.rszing{cursor:col-resize;user-select:none;-webkit-user-select:none}
   #sideA{left:0}
   #sideB{right:0}
   .main.collapsed #sideA{margin-left:-110%}
-  .main.collapsed #sideB{margin-right:-110%}
+  .main.collapsedR #sideB{margin-right:-110%}
   .rsz{display:none}
 }
 </style>
@@ -285,6 +287,7 @@ body.rszing{cursor:col-resize;user-select:none;-webkit-user-select:none}
     </div>
   </div>
   <button id="bprint" class="p s2only">🖨 Print</button>
+  <button id="bsideR" class="s2only" title="Show / hide the print settings">☰</button>
 </div></div>
 
 <div class="main" id="main">
@@ -684,7 +687,11 @@ $('#bside').onclick=()=>{
   $('#main').classList.toggle('collapsed');
   setTimeout(()=>{zoomBy(1)},300);
 };
-if(innerWidth<900)$('#main').classList.add('collapsed');
+$('#bsideR').onclick=()=>{   // same as the left button, for the Print settings panel on the right
+  $('#main').classList.toggle('collapsedR');
+  setTimeout(()=>{zoomBy(1)},300);
+};
+if(innerWidth<900){$('#main').classList.add('collapsed');$('#main').classList.add('collapsedR')}
 let rsT=null;window.addEventListener('resize',()=>{clearTimeout(rsT);rsT=setTimeout(()=>zoomBy(1),250)});
 
 /* ---------------- drag the panel edges to make them wider / narrower ---------------- */
