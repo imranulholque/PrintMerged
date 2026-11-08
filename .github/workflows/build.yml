@@ -3,14 +3,20 @@ name: Build Windows exe
 on:
   push:
     branches: [main]
-    tags: ["v*"]          # a tag like v1.0 also publishes a Release
   workflow_dispatch:       # "Run workflow" button
+
+# Needed to publish the Release that the program's auto update reads.
+permissions:
+  contents: write
+
+# Two quick pushes: only the newest one is built, so "latest release" is always the newest code.
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
     runs-on: windows-latest
-    permissions:
-      contents: write      # needed to attach the exe to a Release
     steps:
       - uses: actions/checkout@v4
 
@@ -21,6 +27,15 @@ jobs:
 
       - name: Install requirements
         run: pip install -r requirements.txt
+
+      # Tell the program which build it is and where to look for newer ones (used by Updates > Auto update).
+      - name: Stamp build info
+        shell: python
+        run: |
+          open("buildinfo.py", "w").write('BUILD = ${{ github.run_number }}\nREPO = "${{ github.repository }}"\nCOMMIT = "${{ github.sha }}"\n')
+
+      - name: Updater test
+        run: python test_updater.py
 
       - name: Download cloudflared (internet link)
         shell: pwsh
@@ -35,22 +50,33 @@ jobs:
           --add-binary "bin\cloudflared.exe;bin"
           --hidden-import pystray._win32
           --hidden-import win32com.client
+          --hidden-import buildinfo
           --collect-all webview
           --collect-all pythonnet
           --collect-all clr_loader
           app.py
 
+      # The updater downloads this zip: it must hold PCPrint.exe.
       - name: Zip
         shell: pwsh
-        run: Compress-Archive -Path dist\PCPrint.exe -DestinationPath dist\PCPrint.zip
+        run: Compress-Archive -Path dist\PCPrint.exe -DestinationPath PCPrint-windows.zip
 
       - uses: actions/upload-artifact@v4
         with:
           name: PCPrint
-          path: dist/PCPrint.zip
+          path: PCPrint-windows.zip
 
-      - name: Publish Release (only for v* tags)
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: dist/PCPrint.zip
+      # Publish this build as a Release: installed programs see it, tell the user, and update after the user agrees.
+      # Only for the main branch. Built as a draft first so nobody sees a release before the zip is attached.
+      - name: Publish release
+        if: github.ref_name == github.event.repository.default_branch
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: build-${{ github.run_number }}
+          NOTES: ${{ github.event.head_commit.message }}
+        run: |
+          gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
+          gh release create "$TAG" PCPrint-windows.zip --draft --target "$GITHUB_SHA" \
+            --title "Build ${{ github.run_number }}" --notes "${NOTES:-Manual build}"
+          gh release edit "$TAG" --draft=false --latest
