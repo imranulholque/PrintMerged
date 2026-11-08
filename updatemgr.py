@@ -15,7 +15,7 @@ import updater
 
 bp = Blueprint("update", __name__)
 HOOKS = {"quit": None, "notify": None, "busy": None, "files": None}   # set by app.py / server.py
-CHECK_EVERY = 6 * 60 * 60          # seconds, while the program stays open
+CHECK_EVERY = 5 * 60               # seconds, while the program stays open (GitHub allows 60 asks / hour, this is 12)
 FIRST_CHECK = 10                   # a few seconds after start, so start-up stays fast
 CFG_DIR = os.path.dirname(updater.LOG_FILE)       # %APPDATA%\PCPrint, same folder as the other settings
 CFG_FILE = os.path.join(CFG_DIR, "update.json")
