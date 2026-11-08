@@ -153,6 +153,12 @@ body.rszing{cursor:col-resize;user-select:none;-webkit-user-select:none}
 .tfhelp div:last-child{border:0}
 .tfhelp b{font-weight:600}
 .tfhelp span{color:var(--mut);text-align:right}
+#updmodal{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:40;display:flex;align-items:center;justify-content:center}
+#updmodal[hidden]{display:none}
+#updmodal .card{width:430px;max-width:92%;margin:0;padding:16px;box-shadow:0 12px 40px rgba(0,0,0,.5)}
+#updmodal h3{margin:0 0 8px}
+#updnotes{white-space:pre-line;max-height:130px;overflow:auto;background:var(--bg);border:1px solid var(--bd);border-radius:8px;padding:6px 8px;font-size:12px}
+#updbar{width:100%;height:10px;border-radius:5px;overflow:hidden;background:var(--bd)}#updbar i{display:block;height:100%;width:0;background:var(--pri);transition:width .2s}
 @media(max-width:900px){
   .side{position:absolute;z-index:6;top:0;bottom:0;max-width:88%;box-shadow:4px 0 24px rgba(0,0,0,.35)}
   #sideA{left:0}
@@ -238,6 +244,16 @@ body.rszing{cursor:col-resize;user-select:none;-webkit-user-select:none}
   <button id="btf" class="s s2only" title="Free layout: move, resize, rotate and copy pictures anywhere on the sheet">✥ Transform</button>
 
   <span class="grow"></span>
+  <div class="dd" id="upddd">
+    <button id="bupd" title="Check for a new version of PC Print">⟳ Updates<span id="updbadge" class="pillb" hidden style="margin-left:6px">new</span></button>
+    <div id="updpanel" class="card pop" hidden style="left:auto;right:0">
+      <div class="row" style="justify-content:space-between"><span class="name">Auto update</span><input type="checkbox" id="updauto" class="sw"></div>
+      <p class="mut">ON: PC Print looks for a new version on GitHub, tells you, asks, then updates itself. OFF: it never looks and never shows anything about updates.</p>
+      <p class="mut" id="updver"></p>
+      <div class="row"><button id="updcheck" class="s">Check for updates now</button><button id="updnow" class="p s" hidden>Update now…</button></div>
+      <p class="mut" id="updmsg"></p>
+    </div>
+  </div>
   <label id="autolbl" class="row mut" hidden title="Open PC Print minimized when Windows starts"><input type="checkbox" id="auto"> Start with Windows</label>
   <button id="bopen" class="p s1only">Preview &amp; Print →</button>
   <button id="close" class="s2only">← Back to pages</button>
@@ -390,6 +406,20 @@ body.rszing{cursor:col-resize;user-select:none;-webkit-user-select:none}
 
 <div id="drop" hidden><div>⬇ Drop files here<br><span class="mut">PDF or images</span></div></div>
 <div id="toast" hidden></div>
+<div id="updmodal" hidden>
+  <div class="card">
+    <h3>PC Print update</h3>
+    <p id="updtext"></p>
+    <div id="updnotes" class="mut" hidden></div>
+    <p class="mut" id="updinfo"></p>
+    <p id="updmerr" style="color:#dc2626"></p>
+    <div id="updprogbox" hidden><div id="updbar"><i></i></div><p class="mut" id="updprogtxt" style="text-align:center"></p></div>
+    <div class="row" id="updbtns" style="justify-content:flex-end">
+      <button id="updlater" class="s">Later</button><button id="updgo" class="p s">Update now</button>
+    </div>
+    <div class="row" id="updcancelrow" style="justify-content:flex-end" hidden><button id="updcancel" class="s">Cancel</button></div>
+  </div>
+</div>
 
 <script>
 const $=s=>document.querySelector(s);
@@ -750,8 +780,8 @@ function numChanged(){
   clearTimeout(numT);numT=setTimeout(()=>{renderPages();if(STEP===2)pvRefresh()},300);
 }
 ['#numon','#numpos','#numalign','#numsize','#numstart','#nummargin','#numbold'].forEach(id=>$(id).addEventListener('input',numChanged));
-$('#bnum').onclick=e=>{e.stopPropagation();$('#phpanel').hidden=true;$('#numpanel').hidden=!$('#numpanel').hidden};
-document.addEventListener('click',e=>{if(!e.target.closest('.dd')){$('#numpanel').hidden=true;$('#phpanel').hidden=true}});
+$('#bnum').onclick=e=>{e.stopPropagation();$('#phpanel').hidden=true;$('#updpanel').hidden=true;$('#numpanel').hidden=!$('#numpanel').hidden};
+document.addEventListener('click',e=>{if(!e.target.closest('.dd')){$('#numpanel').hidden=true;$('#phpanel').hidden=true;$('#updpanel').hidden=true}});
 /* ---------------- phone connection ---------------- */
 let phUrl='',ntUrl='',phTab='lan',phPoll=null;
 function phTabSet(t){
@@ -787,7 +817,7 @@ async function phLoad(first){
     if(d.net&&d.net.state==='starting'&&!$('#phpanel').hidden)phPoll=setTimeout(()=>phLoad(),1000);
   }catch{$('#phurl').textContent='Could not read phone settings'}
 }
-$('#bph').onclick=e=>{e.stopPropagation();$('#numpanel').hidden=true;const p=$('#phpanel');p.hidden=!p.hidden;if(!p.hidden)phLoad(true);else clearTimeout(phPoll)};
+$('#bph').onclick=e=>{e.stopPropagation();$('#numpanel').hidden=true;$('#updpanel').hidden=true;const p=$('#phpanel');p.hidden=!p.hidden;if(!p.hidden)phLoad(true);else clearTimeout(phPoll)};
 $('#nton').onchange=async()=>{
   const on=$('#nton').checked;$('#nton').disabled=true;
   try{await api('/api/phone/net',{method:'POST',headers:JH,body:JSON.stringify({on})})}catch{}
@@ -1523,7 +1553,80 @@ $('#auto').onchange=async()=>{
     if(!r.ok){$('#auto').checked=!on;toast(j.error||'Could not change it')}
   }catch{$('#auto').checked=!on;toast('Could not change it')}
 };
-(async()=>{initAuto();await loadSettings();numNote();await refresh(true);setInterval(refresh,1200)})();
+/* ---------------- auto update ---------------- */
+let UP=null,UPT=null,UPASKED=new Set(),UPWANT=false;
+const upSize=b=>b>0?(b/1048576).toFixed(1)+' MB':'';
+async function upLoad(){
+  clearTimeout(UPT);
+  try{UP=await (await api('/api/update')).json();upRender()}catch{}
+  UPT=setTimeout(upLoad,UP&&(UP.state==='downloading'||UP.checking||UPWANT)?600:5000);
+}
+function upRender(){
+  if(!UP)return;
+  const i=UP.info,dl=UP.state==='downloading'||UP.state==='ready';
+  $('#updbadge').hidden=!i;
+  if(document.activeElement!==$('#updauto'))$('#updauto').checked=UP.enabled;
+  $('#updver').textContent='Version: '+UP.version;
+  $('#updcheck').disabled=UP.checking||dl;
+  $('#updcheck').textContent=UP.checking?'Checking…':'Check for updates now';
+  $('#updnow').hidden=!(i&&UP.can);
+  $('#updmsg').textContent=UP.state==='error'?UP.error:i?`Build ${i.build} is ready.`:UP.msg;
+  // the answer of a check the user asked for: open the question at once
+  if(UPWANT&&!UP.checking){UPWANT=false;if(i){UPASKED.add(i.build);upOpen()}}
+  // a check done by itself: ask once per build (not while a print is running)
+  else if(i&&UP.enabled&&!UPASKED.has(i.build)&&!UP.busy&&$('#updmodal').hidden){UPASKED.add(i.build);upOpen()}
+  if(!$('#updmodal').hidden)upModal();
+}
+function upOpen(){
+  if(!UP||!UP.info)return;
+  const i=UP.info;
+  $('#updtext').textContent=`A new version of PC Print is ready: build ${i.build} (you have ${UP.version}).`;
+  $('#updnotes').textContent=i.notes||'';$('#updnotes').hidden=!i.notes;
+  $('#updmodal').hidden=false;upModal();
+}
+function upModal(){
+  const i=UP.info,dl=UP.state==='downloading'||UP.state==='ready';
+  let info='';
+  if(!UP.can)info='This copy cannot install updates by itself. Get build '+(i?i.build:'')+' from the GitHub releases page.';
+  else if(!UP.writable)info='The program folder is write-protected, so it cannot update itself there. Move PCPrint.exe to a normal folder (for example C:\\Tools\\PCPrint).';
+  else info='The program closes, updates itself and opens again. Your settings are kept.'+(UP.files?`\nThe file list (${UP.files} file${UP.files>1?'s':''}) is not saved, so you will have to add the files again.`:'');
+  if(UP.busy)info+='\nA print job is running: wait until it is finished.';
+  $('#updinfo').style.whiteSpace='pre-line';$('#updinfo').textContent=dl?'':info;
+  $('#updmerr').textContent=UP.state==='error'?'The update could not be installed.\n'+UP.error+'\nNothing was changed.':'';
+  $('#updmerr').style.whiteSpace='pre-line';
+  $('#updbtns').hidden=dl;$('#updprogbox').hidden=!dl;$('#updcancelrow').hidden=!dl||UP.state==='ready';
+  $('#updgo').hidden=!(UP.can&&UP.writable);$('#updgo').disabled=!!UP.busy;
+  if(dl){
+    const p=UP.state==='ready'?100:UP.total>0?Math.min(99,Math.round(UP.done*100/UP.total)):0;
+    $('#updbar i').style.width=p+'%';
+    $('#updprogtxt').textContent=UP.state==='ready'?'Restarting…':`Downloading… ${p}%`+(UP.total?`  (${upSize(UP.done)} of ${upSize(UP.total)})`:'');
+  }
+}
+$('#bupd').onclick=e=>{e.stopPropagation();$('#numpanel').hidden=true;$('#phpanel').hidden=true;const p=$('#updpanel');p.hidden=!p.hidden;if(!p.hidden)upLoad()};
+$('#updauto').onchange=async()=>{
+  const on=$('#updauto').checked;
+  try{await api('/api/update/enabled',{method:'POST',headers:JH,body:JSON.stringify({on})});
+    toast(on?'Auto update is on: you will be told when a new version is ready.':'Auto update is off: new versions will not be shown.')}
+  catch{$('#updauto').checked=!on;toast('Could not change it')}
+  upLoad();
+};
+$('#updcheck').onclick=async()=>{
+  UPWANT=true;
+  try{await api('/api/update/check',{method:'POST'})}catch{UPWANT=false}
+  upLoad();
+};
+$('#updnow').onclick=()=>{$('#updpanel').hidden=true;upOpen()};
+$('#updlater').onclick=()=>{$('#updmodal').hidden=true};
+$('#updcancel').onclick=async()=>{try{await api('/api/update/cancel',{method:'POST'})}catch{};upLoad()};
+$('#updgo').onclick=async()=>{
+  $('#updmerr').textContent='';
+  try{
+    const r=await api('/api/update/install',{method:'POST'});
+    if(!r.ok){const j=await r.json();$('#updmerr').textContent=j.error||'Could not start the update.'}
+  }catch{$('#updmerr').textContent='Could not start the update.'}
+  upLoad();
+};
+(async()=>{initAuto();upLoad();await loadSettings();numNote();await refresh(true);setInterval(refresh,1200)})();
 </script>
 </body>
 </html>
