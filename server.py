@@ -4,6 +4,7 @@ from flask import Flask, request, jsonify, send_file, session
 import fitz
 from PIL import Image, ImageOps, ImageDraw, ImageFont, ImageGrab
 import printing
+import updatemgr
 
 
 def res(p):
@@ -13,10 +14,13 @@ def res(p):
 
 app = Flask(__name__, static_folder=None)
 app.secret_key = os.urandom(24)
+app.register_blueprint(updatemgr.bp)   # auto update routes (/api/update...), PC window only
 FILES = {}
 ORDER = []
 GONE = {}   # file id -> set of page numbers removed with the red cross (shared by PC and phone)
 JOBS = {}
+updatemgr.HOOKS["busy"] = lambda: any(j.get("state") == "run" for j in list(JOBS.values()))
+updatemgr.HOOKS["files"] = lambda: len(FILES)
 LOCK = threading.Lock()    # fitz is not thread safe
 SLOCK = threading.Lock()   # file list changes
 REV = {"n": 0}
@@ -55,7 +59,7 @@ LOCAL = ("127.0.0.1", "::1")
 PH = {"ok": False, "port": 0, "fails": 0, "until": 0}
 PH_FILE = os.path.join(CFG_DIR, "phone.json")
 SREV = {"n": 0}
-LOCAL_ONLY = ("/api/add", "/api/pick", "/api/paste", "/api/autostart", "/api/phone/", "/api/x")
+LOCAL_ONLY = ("/api/add", "/api/pick", "/api/paste", "/api/autostart", "/api/phone/", "/api/x", "/api/update")
 
 
 PLOCK2 = threading.Lock()

@@ -6,6 +6,7 @@ logging.getLogger("werkzeug").setLevel(logging.ERROR)
 
 from werkzeug.serving import make_server
 import server
+import updatemgr
 
 MUTEX = None   # keeps the "one window only" lock alive
 EXTS = (".pdf", ".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif", ".tif", ".tiff")
@@ -42,6 +43,15 @@ def quit_app(*a):
     QUIT["v"] = True
     try:
         win.destroy()
+    except Exception:
+        pass
+
+
+def notify(title, text):
+    """Windows tray message (used by auto update). Does nothing when there is no tray icon."""
+    try:
+        if tray:
+            tray.notify(text, title)
     except Exception:
         pass
 
@@ -285,10 +295,13 @@ def main():
         return list(r or [])
 
     server.HOOKS["pick"] = pick
+    updatemgr.HOOKS["quit"] = quit_app
+    updatemgr.HOOKS["notify"] = notify
     server.HOOKS["front"] = front
     if getattr(sys, "frozen", False):
         server.HOOKS["autostart_get"] = autostart_get
         server.HOOKS["autostart_set"] = autostart_set
+    updatemgr.start()      # auto update: looks for a new build a few seconds after start (if switched on)
     webview.start()
     if tray:
         try:
