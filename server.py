@@ -29,6 +29,9 @@ BATCH = {"t": 0.0, "ids": []}
 HOOKS = {"rebind": None, "pick": None, "pickdir": None, "front": None, "autostart_get": None, "autostart_set": None}   # set by app.py (file dialog, bring window to front)
 IMG_EXT = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif", ".tif", ".tiff"}
 SCALES = ("fit", "actual", "fill", "custom")
+NUP_CHOICES = (2, 4, 6, 8, 12, 16)   # pages on one sheet (always an even number); 1 = off
+NUP_GAP = 2.0                        # mm of empty space between the small pages
+NUP_TURN = 1.15                      # a page is turned 90 degrees only if that makes it at least 15% bigger
 
 CFG_DIR = os.path.join(os.environ.get("APPDATA") or os.path.expanduser("~"), "PCPrint")
 PROF_FILE = os.path.join(CFG_DIR, "profiles.json")
@@ -875,6 +878,100 @@ def sheet(f, idx, W, H, mono, mode="fit", ppmm=None, pct=100.0, num=None, rotate
     return canvas
 
 
+# ------------------------------------------------- several pages on one sheet (N-up)
+def get_nup(v):
+    """Pages per sheet: one of NUP_CHOICES, anything else = 1 (off)."""
+    try:
+        v = int(float(v))
+    except Exception:
+        return 1
+    return v if v in NUP_CHOICES else 1
+
+
+def _nup_fit(cw, ch, asp):
+    """Biggest size (page height, same unit as cw/ch) of a page with width/height = asp inside a cw x ch cell,
+    and whether the page has to be turned 90 degrees for that."""
+    s1 = min(cw / asp, ch)
+    s2 = min(cw, ch / asp)
+    return (s2, True) if s2 > s1 * NUP_TURN else (s1, False)
+
+
+def nup_grid(n, aw, ah, asp):
+    """(columns, rows) for n pages on an aw x ah mm area: the split that makes every page biggest."""
+    best = None
+    for c in range(1, n + 1):
+        if n % c:
+            continue
+        r = n // c
+        cw = (aw - NUP_GAP * (c - 1)) / c
+        ch = (ah - NUP_GAP * (r - 1)) / r
+        if cw <= 1 or ch <= 1:
+            continue
+        s, _ = _nup_fit(cw, ch, asp)
+        if best is None or s > best[0] * 1.0001:
+            best = (s, c, r)
+    return (best[1], best[2]) if best else (n, 1)
+
+
+def nup_asp(f, idx):
+    """width / height of a page (used to choose the grid)."""
+    try:
+        w, h = natural_mm(f, idx)
+        if w > 0 and h > 0:
+            return w / h
+    except Exception:
+        pass
+    return 210 / 297
+
+
+def parse_group(s):
+    """'fileid:page,fileid:page' -> [(file, page index)], bad entries dropped."""
+    out = []
+    for t in str(s or "").split(",")[:max(NUP_CHOICES)]:
+        fid, _, p = t.rpartition(":")
+        f = FILES.get(fid)
+        try:
+            p = int(p)
+        except Exception:
+            continue
+        if f and 0 <= p < f["pages"]:
+            out.append((f, p))
+    return out
+
+
+def nup_sheet(group, W, H, mono, ppmm, nargs, grid):
+    """One printed sheet with several pages on it (W x H pixels, ppmm pixels per mm).
+    Every page is fitted whole into its own cell (nothing cut off, turned 90 degrees when that is bigger).
+    The page number is drawn on each page itself, smaller in the same ratio as the page."""
+    cols, rows = grid
+    white = 255 if mono else (255, 255, 255)
+    canvas = Image.new("L" if mono else "RGB", (W, H), white)
+    gap = max(0, round(NUP_GAP * ppmm))
+    cw, ch = max(1, (W - gap * (cols - 1)) // cols), max(1, (H - gap * (rows - 1)) // rows)
+    k = min(1.0, math.sqrt((cw * ch) / float(W * H)))   # how much smaller than a whole sheet
+    for i, (f, p) in enumerate(group[:cols * rows]):
+        r, c = divmod(i, cols)
+        asp = nup_asp(f, p)
+        _, turn = _nup_fit(cw, ch, asp)
+        tw, th = (ch, cw) if turn else (cw, ch)       # the cell, in the page's own direction
+        s = min(tw / asp, th)                         # page height in pixels when it fills the cell
+        pw, ph = max(1, round(s * asp)), max(1, round(s))
+        num = numspec(nargs, f["id"], p)
+        if num:
+            num = {**num, "size": num["size"] * k, "margin": num["margin"] * k}
+        # the tile is exactly the page (no white border), so the page number sits at the page's own edge
+        tile = sheet(f, p, pw, ph, mono, "fit", ppmm, 100.0, num, rotate=False)
+        if turn:
+            tile = tile.rotate(90, expand=True)   # the page number turns together with the page
+        canvas.paste(tile, (c * (cw + gap) + (cw - tile.width) // 2, r * (ch + gap) + (ch - tile.height) // 2))
+    return canvas
+
+
+def nup_groups(pages, n):
+    """Cut the page list into sheets of n pages (the last sheet may have fewer)."""
+    return [pages[i:i + n] for i in range(0, len(pages), n)]
+
+
 # ------------------------------------------------- free layout (Transform)
 def natural_mm(f, idx):
     """Size of the page at its natural (100%) size, in mm."""
@@ -1105,7 +1202,13 @@ def preview():
     AH = max(1, min(H - oy, int(a["ah"] * s)))
     mono = request.args.get("color") != "color"
     num = numspec(request.args, f["id"], p)
-    if request.args.get("blank") == "1":   # Transform tool: empty sheet, the pictures are drawn by the page
+    nup = get_nup(request.args.get("nup"))
+    group = parse_group(request.args.get("pg")) if nup > 1 else []
+    if group:   # several pages on this sheet: the grid is chosen from the first page of the whole job
+        first = parse_group(request.args.get("g0")) or group
+        grid = nup_grid(nup, a["aw"], a["ah"], nup_asp(*first[0]))
+        page = nup_sheet(group, AW, AH, mono, s, request.args, grid).convert("RGB")
+    elif request.args.get("blank") == "1":   # Transform tool: empty sheet, the pictures are drawn by the page
         page = Image.new("RGB", (AW, AH), (255, 255, 255))
         if num:
             stamp(page, num, s)
@@ -1238,12 +1341,14 @@ def do_print():
         copies = 1
     orient = "landscape" if d.get("orient") == "landscape" else "portrait"
     jid = uuid.uuid4().hex[:8]
-    JOBS[jid] = {"state": "run", "done": 0, "total": len(pages) * copies}
+    nup = get_nup(d.get("nup"))
+    sheets = nup_groups([(f, p) for f, p, _ in pages], nup) if nup > 1 else None   # N pages on one sheet
+    JOBS[jid] = {"state": "run", "done": 0, "total": (len(sheets) if sheets else len(pages)) * copies}
     color = d.get("color") == "color"
     profile = find_profile(d.get("printer", ""), d.get("profile"))  # None = normal way
     mode = d.get("scale") if d.get("scale") in SCALES else "fit"
     pct = get_pct(d.get("pct"))
-    lay = d.get("layout") if isinstance(d.get("layout"), dict) else {}   # only sent when Transform is on
+    lay = d.get("layout") if isinstance(d.get("layout"), dict) and not sheets else {}   # only sent when Transform is on
     nd = d.get("num") or {}
     nargs = {"num": "1" if nd.get("on") else "0", "npos": nd.get("pos"), "nalign": nd.get("align"),
              "nsize": nd.get("size"), "nstart": nd.get("start"),
@@ -1258,14 +1363,20 @@ def do_print():
 
     def run():
         try:
-            area_mm = get_area({"printer": d["printer"], "paper": d.get("paper"),
-                                "color": "color" if color else "mono",
-                                "duplex": d.get("duplex", "off"), "orient": orient})["aw"]
+            area = get_area({"printer": d["printer"], "paper": d.get("paper"),
+                             "color": "color" if color else "mono",
+                             "duplex": d.get("duplex", "off"), "orient": orient})
+            area_mm = area["aw"]
+            if sheets:
+                grid = nup_grid(nup, area["aw"], area["ah"], nup_asp(*sheets[0][0]))
+                provider = lambda i, W, H, m: nup_sheet(sheets[i], W, H, m, W / area_mm, nargs, grid)
+            else:
+                provider = lambda i, W, H, m: sheet(pages[i][0], pages[i][1], W, H, m, mode, W / area_mm, pct,
+                                                    numspec({**nargs, "nn": i + 1} if lay else nargs, pages[i][0]["id"], pages[i][1]),
+                                                    items=page_items(i))
             printing.print_job(
-                d["printer"], d.get("paper"), color, d.get("duplex", "off"), orient, copies, len(pages),
-                lambda i, W, H, m: sheet(pages[i][0], pages[i][1], W, H, m, mode, W / area_mm, pct,
-                                         numspec({**nargs, "nn": i + 1} if lay else nargs, pages[i][0]["id"], pages[i][1]),
-                                         items=page_items(i)),
+                d["printer"], d.get("paper"), color, d.get("duplex", "off"), orient, copies,
+                len(sheets) if sheets else len(pages), provider,
                 lambda done, total: JOBS[jid].update(done=done, total=total),
                 d.get("title", "PC Print"), profile=profile)
             JOBS[jid]["state"] = "done"
@@ -1392,7 +1503,11 @@ def save_pdf():
               "duplex": "off", "orient": orient, "w": d.get("w", 210), "h": d.get("h", 297)}
     base = safe_pdf_name(d.get("name"))
     jid = uuid.uuid4().hex[:8]
-    JOBS[jid] = {"state": "run", "done": 0, "total": len(pages)}
+    nup = get_nup(d.get("nup"))
+    sheets = nup_groups([(f, p) for f, p, _ in pages], nup) if nup > 1 else None   # N pages on one sheet
+    if sheets:
+        lay = {}
+    JOBS[jid] = {"state": "run", "done": 0, "total": len(sheets) if sheets else len(pages)}
 
     def page_items(i):
         f, p, vk = pages[i]
@@ -1413,9 +1528,14 @@ def save_pdf():
             with LOCK:
                 doc = fitz.open()
             try:
-                for i, (f, p, vk) in enumerate(pages):
-                    num = numspec({**nargs, "nn": i + 1} if lay else nargs, f["id"], p)
-                    pg = sheet(f, p, AW, AH, not color, mode, sc, pct, num, items=page_items(i))
+                grid = nup_grid(nup, a["aw"], a["ah"], nup_asp(*sheets[0][0])) if sheets else None
+                for i in range(len(sheets) if sheets else len(pages)):
+                    if sheets:
+                        pg = nup_sheet(sheets[i], AW, AH, not color, sc, nargs, grid)
+                    else:
+                        f, p, vk = pages[i]
+                        num = numspec({**nargs, "nn": i + 1} if lay else nargs, f["id"], p)
+                        pg = sheet(f, p, AW, AH, not color, mode, sc, pct, num, items=page_items(i))
                     paper = Image.new(pg.mode, (W, H), 255 if pg.mode == "L" else (255, 255, 255))
                     paper.paste(pg, (ox, oy))
                     b = io.BytesIO()
