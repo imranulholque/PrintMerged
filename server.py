@@ -26,7 +26,7 @@ SLOCK = threading.Lock()   # file list changes
 REV = {"n": 0}
 NOTICE = {"t": ""}
 BATCH = {"t": 0.0, "ids": []}
-HOOKS = {"rebind": None, "pick": None, "front": None, "autostart_get": None, "autostart_set": None}   # set by app.py (file dialog, bring window to front)
+HOOKS = {"rebind": None, "pick": None, "pickdir": None, "front": None, "autostart_get": None, "autostart_set": None}   # set by app.py (file dialog, bring window to front)
 IMG_EXT = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif", ".tif", ".tiff"}
 SCALES = ("fit", "actual", "fill", "custom")
 
@@ -59,7 +59,7 @@ LOCAL = ("127.0.0.1", "::1")
 PH = {"ok": False, "port": 0, "fails": 0, "until": 0}
 PH_FILE = os.path.join(CFG_DIR, "phone.json")
 SREV = {"n": 0}
-LOCAL_ONLY = ("/api/add", "/api/pick", "/api/paste", "/api/autostart", "/api/phone/", "/api/x", "/api/update")
+LOCAL_ONLY = ("/api/add", "/api/pick", "/api/paste", "/api/autostart", "/api/phone/", "/api/x", "/api/update", "/api/save")   # /api/savedir, /api/savepdf: write to this PC's disk
 
 
 PLOCK2 = threading.Lock()
@@ -1274,6 +1274,179 @@ def do_print():
 
     threading.Thread(target=run, daemon=True).start()
     return jsonify(id=jid)
+
+
+# ------------------------------------------------- save the merged result as a PDF
+SAVE_FILE = os.path.join(CFG_DIR, "save.json")   # kept apart from settings.json: phones may read that one
+SAVE_DPI = 200.0
+
+
+def save_cfg():
+    try:
+        with open(SAVE_FILE, "r", encoding="utf-8") as fh:
+            d = json.load(fh)
+        return d if isinstance(d, dict) else {}
+    except Exception:
+        return {}
+
+
+def save_cfg_set(**kw):
+    d = save_cfg()
+    d.update(kw)
+    os.makedirs(CFG_DIR, exist_ok=True)
+    with open(SAVE_FILE, "w", encoding="utf-8") as fh:
+        json.dump(d, fh)
+
+
+def save_dir_now():
+    d = save_cfg().get("dir") or ""
+    return d if d and os.path.isdir(d) else ""
+
+
+@app.get("/api/savedir")
+def savedir_get():
+    return jsonify(dir=save_dir_now())
+
+
+@app.post("/api/savedir")
+def savedir_set():
+    """{pick: true} opens the folder window; {dir: path} sets it directly. The choice is remembered."""
+    d = request.get_json(silent=True) or {}
+    path = ""
+    if d.get("pick"):
+        if not HOOKS["pickdir"]:
+            return jsonify(error="No folder window"), 500
+        try:
+            with DIALOG_LOCK:
+                path = HOOKS["pickdir"]() or ""
+        except Exception as e:
+            return jsonify(error=str(e)), 500
+        if not path:
+            return jsonify(dir=save_dir_now(), cancelled=True)
+    else:
+        path = str(d.get("dir") or "")
+    if not path or not os.path.isdir(path):
+        return jsonify(error="That folder does not exist."), 400
+    try:
+        save_cfg_set(dir=path)
+    except Exception as e:
+        return jsonify(error=str(e)), 500
+    return jsonify(dir=path)
+
+
+@app.post("/api/savedir/open")
+def savedir_open():
+    d = save_dir_now()
+    if not d:
+        return jsonify(error="No save folder chosen yet."), 400
+    try:
+        os.startfile(d)
+    except Exception as e:
+        return jsonify(error=str(e)), 500
+    return jsonify(ok=True)
+
+
+def safe_pdf_name(name):
+    name = re.sub(r'[<>:"/\\|?*\x00-\x1f]', " ", str(name or "")).strip(" .")
+    name = re.sub(r"\s+", " ", name)
+    if name.lower().endswith(".pdf"):
+        name = name[:-4].rstrip(" .")
+    if not name:
+        name = "Merged " + time.strftime("%Y-%m-%d %H-%M-%S")
+    return name[:120]
+
+
+def unique_path(folder, base):
+    path = os.path.join(folder, base + ".pdf")
+    n = 2
+    while os.path.exists(path):
+        path = os.path.join(folder, "%s (%d).pdf" % (base, n))
+        n += 1
+    return path
+
+
+@app.post("/api/savepdf")
+def save_pdf():
+    """Same pages, same order, same layout, page numbers and Transform changes as printing - but into one PDF file
+    in the chosen folder (page size = the paper, the picture sits where the printer would put it)."""
+    d = request.get_json(silent=True) or {}
+    try:
+        pages = [(FILES[x[0]], int(x[1]), (str(x[2]) if len(x) > 2 else None)) for x in d["pages"]]
+    except Exception:
+        return jsonify(error="Files not found. Add them again."), 400
+    if not pages:
+        return jsonify(error="No pages selected"), 400
+    folder = str(d.get("dir") or "") or save_dir_now()
+    if not folder or not os.path.isdir(folder):
+        return jsonify(error="nodir"), 400
+    orient = "landscape" if d.get("orient") == "landscape" else "portrait"
+    color = d.get("color") == "color"
+    mode = d.get("scale") if d.get("scale") in SCALES else "fit"
+    pct = get_pct(d.get("pct"))
+    lay = d.get("layout") if isinstance(d.get("layout"), dict) else {}
+    nd = d.get("num") or {}
+    nargs = {"num": "1" if nd.get("on") else "0", "npos": nd.get("pos"), "nalign": nd.get("align"),
+             "nsize": nd.get("size"), "nstart": nd.get("start"),
+             "nmargin": nd.get("margin"), "nbold": "1" if nd.get("bold") else "0"}
+    area_q = {"printer": d.get("printer", ""), "paper": d.get("paper"), "color": "color" if color else "mono",
+              "duplex": "off", "orient": orient, "w": d.get("w", 210), "h": d.get("h", 297)}
+    base = safe_pdf_name(d.get("name"))
+    jid = uuid.uuid4().hex[:8]
+    JOBS[jid] = {"state": "run", "done": 0, "total": len(pages)}
+
+    def page_items(i):
+        f, p, vk = pages[i]
+        lk = vk or f'{f["id"]}:{p}'
+        if lk not in lay:
+            return [] if vk else None
+        return clean_items(lay[lk], (f, p))
+
+    def run():
+        tmp = None
+        try:
+            a = get_area(area_q)
+            sc = SAVE_DPI / 25.4                              # pixels per mm
+            W, H = max(1, round(a["pw"] * sc)), max(1, round(a["ph"] * sc))
+            ox, oy = round(a["ox"] * sc), round(a["oy"] * sc)
+            AW, AH = max(1, min(W - ox, round(a["aw"] * sc))), max(1, min(H - oy, round(a["ah"] * sc)))
+            pt_w, pt_h = a["pw"] / 25.4 * 72.0, a["ph"] / 25.4 * 72.0
+            with LOCK:
+                doc = fitz.open()
+            try:
+                for i, (f, p, vk) in enumerate(pages):
+                    num = numspec({**nargs, "nn": i + 1} if lay else nargs, f["id"], p)
+                    pg = sheet(f, p, AW, AH, not color, mode, sc, pct, num, items=page_items(i))
+                    paper = Image.new(pg.mode, (W, H), 255 if pg.mode == "L" else (255, 255, 255))
+                    paper.paste(pg, (ox, oy))
+                    b = io.BytesIO()
+                    paper.save(b, "JPEG", quality=90, optimize=True, dpi=(SAVE_DPI, SAVE_DPI))
+                    del pg, paper
+                    with LOCK:
+                        page = doc.new_page(width=pt_w, height=pt_h)
+                        page.insert_image(page.rect, stream=b.getvalue())
+                    JOBS[jid].update(done=i + 1)
+                path = unique_path(folder, base)
+                tmp = path + ".part"
+                with LOCK:
+                    doc.save(tmp, deflate=True, garbage=3)
+            finally:
+                with LOCK:
+                    doc.close()
+            os.replace(tmp, path)
+            tmp = None
+            JOBS[jid].update(state="done", path=path)
+        except Exception as e:
+            JOBS[jid].update(state="error", error=str(e))
+        finally:
+            if tmp and os.path.exists(tmp):
+                try:
+                    os.remove(tmp)
+                except OSError:
+                    pass
+
+    threading.Thread(target=run, daemon=True).start()
+    return jsonify(id=jid)
+
 
 
 @app.get("/api/job/<jid>")

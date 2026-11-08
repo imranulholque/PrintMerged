@@ -295,6 +295,13 @@ def main():
         return list(r or [])
 
     server.HOOKS["pick"] = pick
+
+    def pickdir():
+        kind = webview.FileDialog.FOLDER if hasattr(webview, "FileDialog") else webview.FOLDER_DIALOG
+        r = win.create_file_dialog(kind)
+        return str(list(r)[0]) if r else ""
+
+    server.HOOKS["pickdir"] = pickdir
     updatemgr.HOOKS["quit"] = quit_app
     updatemgr.HOOKS["notify"] = notify
     server.HOOKS["front"] = front

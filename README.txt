@@ -31,3 +31,15 @@ AUTO UPDATE  (top bar > Updates)
    writable folder (C:\Tools\PCPrint is fine, C:\Program Files is not). Details of a failed update: %APPDATA%\PCPrint\update.log
  - Repository Settings > Actions > General > Workflow permissions must allow "Read and write permissions".
  - Test the update logic: python test_updater.py
+
+SAVE PDF  (step 2, top right: "Save PDF" and the folder button)
+ - Saves every ticked page, in the same order as it prints, as ONE PDF. Page numbers, scaling, color/mono, orientation and
+   everything changed with Transform (moved / resized / rotated / copied pictures, added pages) are included: it is the same
+   result as the printout. Page size = the paper size chosen in Print settings (works without a printer too: A4 by default).
+ - First click asks for a folder once; after that it saves straight into that folder. The folder button changes the folder,
+   opens it, and lets you type a file name (empty = automatic, "<first file> merged <date time>"). An existing file is never
+   overwritten: a " (2)" is added. The folder is kept in %APPDATA%\PCPrint\save.json. Only the PC window can use it.
+ - Quality: 200 dpi pictures inside the PDF (text stays sharp, files stay small).
+
+TRANSFORM:  Shift + drag = the picture(s) move dead straight (sideways, up / down or exactly diagonal). Works for moving and for
+   Alt + drag copying. While Shift is held the picture stays on its page.
