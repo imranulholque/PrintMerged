@@ -367,6 +367,7 @@ body.rszing{cursor:col-resize;user-select:none;-webkit-user-select:none}
         <div><b>Shift + drag</b><span>move / copy dead straight (sideways, up / down, diagonal)</span></div>
         <div><b>Corner handles</b><span>resize · Shift = free shape</span></div>
         <div><b>R / Shift + R</b><span>rotate 90° clockwise / back</span></div>
+        <div><b>R, nothing selected</b><span>mouse on a page = that page · mouse elsewhere = all pages</span></div>
         <div><b>Arrow keys</b><span>nudge 1 mm · Shift = 10 mm</span></div>
         <div><b>Drag to another page</b><span>move it there (Alt + drag = copy there)</span></div>
         <div><b>Ctrl + C / Ctrl + X</b><span>copy / cut the selected pictures</span></div>
@@ -420,7 +421,13 @@ body.rszing{cursor:col-resize;user-select:none;-webkit-user-select:none}
       </div>
       <input id="pctr" type="range" min="10" max="300" step="5" value="100" hidden style="width:100%">
       <p class="mut" id="scnote"></p>
-      <label class="row" style="margin-top:4px"><input type="checkbox" id="pnumon"> <span class="name">Add page numbers</span></label>
+      <div class="row" style="justify-content:space-between;margin-top:6px" title="Print several pages on one sheet (2 = half size, 4 = quarter size ...)">
+        <span class="name">Many pages on one sheet</span><input type="checkbox" id="nupon" class="sw"></div>
+      <div id="nupbox" hidden style="margin-top:6px">
+        <div class="seg" id="nupseg"></div>
+        <p class="mut" id="nupnote"></p>
+      </div>
+      <label class="row" style="margin-top:8px"><input type="checkbox" id="pnumon"> <span class="name">Add page numbers</span></label>
       <p class="mut" id="numnote"></p>
       <p class="mut" id="dnote"></p>
     </div>
@@ -770,7 +777,7 @@ const same=(a,b)=>Object.keys(a).every(k=>a[k]==b[k])&&Object.keys(b).every(k=>a
 async function syncSettings(){
   let j;try{j=await (await api('/api/settings')).json()}catch{return}
   if(j.num&&!same(j.num,NUM)){Object.assign(NUM,j.num);fillNum();numNote();renderPages();if(STEP===2)pvRefresh()}
-  if(j.prn&&!same(j.prn,PRN)){PRN=j.prn;await applyPrnAll()}
+  if(j.prn&&!prT&&!same(j.prn,PRN)){PRN=j.prn;await applyPrnAll()}   // not while a change of mine is still waiting to be saved
 }
 function applyPrn(){
   const s=PRN,has=(id,v)=>[...$(id).options].some(o=>o.value===v);
@@ -779,8 +786,11 @@ function applyPrn(){
   if(CAPS&&CAPS.duplex&&s.duplex)$('#duplex').value=s.duplex;
   if(s.orient)$('#orient').value=s.orient;
   if(s.copies)$('#copies').value=s.copies;
+  if(s.nupN&&NUPS.includes(+s.nupN))NUP.n=+s.nupN;
+  if(s.nupOn!==undefined)NUP.on=!!s.nupOn&&!tfActive();
   if(s.scale)setScale(s.scale);
   if(s.pct)setPct(s.pct);
+  nupUI();
 }
 async function applyPrnAll(){
   if(!CAPS||CAPS.error)return;
@@ -791,8 +801,9 @@ async function applyPrnAll(){
 function savePrn(e){
   PRN=e&&e.target&&e.target.id==='printer'?{printer:$('#printer').value}:
     {printer:$('#printer').value,paper:$('#paper').value,orient:$('#orient').value,color:$('#color').value,
-     duplex:$('#duplex').value,copies:$('#copies').value,scale:$('#scale').value,pct:$('#pct').value};
-  clearTimeout(prT);prT=setTimeout(()=>api('/api/settings',{method:'POST',headers:JH,body:JSON.stringify({prn:PRN})}),400);
+     duplex:$('#duplex').value,copies:$('#copies').value,scale:$('#scale').value,pct:$('#pct').value,
+     nupOn:NUP.on,nupN:NUP.n};
+  clearTimeout(prT);prT=setTimeout(()=>{prT=null;api('/api/settings',{method:'POST',headers:JH,body:JSON.stringify({prn:PRN})})},400);
 }
 ['change','input'].forEach(ev=>$('#setp').addEventListener(ev,e=>{if(!['profile','pnumon'].includes(e.target.id))savePrn(e)}));
 ['#pctm','#pctp'].forEach(i=>$(i).addEventListener('click',()=>setTimeout(savePrn,0)));
@@ -972,6 +983,49 @@ $('#bdel').onclick=async()=>{
   loadProfiles();
 };
 
+/* ---- many pages on one sheet (on / off switch + 2, 4, 6, 8, 12, 16) ---- */
+const NUPS=[2,4,6,8,12,16];
+const NUP={on:false,n:2};
+const nupN=()=>NUP.on?NUP.n:1;
+NUPS.forEach(n=>{
+  const b=el('button',{type:'button',textContent:String(n),title:n+' pages on one sheet'});
+  b.dataset.n=n;
+  b.onclick=()=>{NUP.n=n;nupChanged()};
+  $('#nupseg').append(b);
+});
+function nupText(){
+  const n=NUP.n,m=($('#paper').value||'').match(/^A(\d)\b/i);
+  const sz=m&&[2,4,8,16].includes(n)?` (${'A'+m[1]} sheet → A${+m[1]+Math.log2(n)} size pages)`:'';
+  return `${n} pages on one sheet${sz}. The whole sheet is used. Every page is fitted whole into its own space, nothing is cut off. Page numbers stay on each page.`;
+}
+function nupUI(){
+  $('#nupon').checked=NUP.on;$('#nupbox').hidden=!NUP.on;
+  [...$('#nupseg').children].forEach(b=>b.classList.toggle('on',+b.dataset.n===NUP.n));
+  $('#scale').disabled=NUP.on;
+  if(NUP.on){
+    $('#pctbox').hidden=$('#pctr').hidden=true;
+    $('#scnote').textContent='Scaling is not used here: every page is fitted whole into its own space on the sheet.';
+  }else{
+    const v=$('#scale').value;
+    $('#pctbox').hidden=$('#pctr').hidden=v!=='custom';
+    $('#scnote').textContent=SCN[v]||'';
+  }
+  $('#nupnote').textContent=NUP.on?nupText():'';
+  $('#btf').title=NUP.on?'Not available while "Many pages on one sheet" is on':'Free layout: move, resize, rotate and copy pictures anywhere on the sheet';
+}
+function nupChanged(){
+  if(NUP.on){   // Transform (free layout) and many-pages-per-sheet cannot work together
+    if(TF.on&&!TFX.length&&!TFDEL.size&&!Object.values(LAY).some(l=>l&&l.touched)){TF.on=false;TF.sel=null;$('#btf').classList.remove('on');tfSync()}
+    if(tfActive()){
+      NUP.on=false;nupUI();
+      return toast('Transform changes are in use.\nPress Transform → Reset all first, then turn this on.');
+    }
+  }
+  nupUI();savePrn();if(STEP===2)pvRefresh();
+}
+$('#nupon').onchange=()=>{NUP.on=$('#nupon').checked;nupChanged()};
+$('#paper').addEventListener('change',()=>{if(NUP.on)$('#nupnote').textContent=nupText()});
+
 /* ---- scaling ---- */
 const SC=[['fit','Fit to printable area'],['actual','Actual size (100%)'],['fill','Fill page (crop)'],['custom','Custom %']];
 const SCN={fit:'Whole page fitted inside the printable area. Nothing is cut off.',
@@ -980,8 +1034,7 @@ const SCN={fit:'Whole page fitted inside the printable area. Nothing is cut off.
   custom:'Percent of the real size (100% = actual size), always centered. Anything outside the printable area is cut off.'};
 SC.forEach(([v,t])=>$('#scale').append(new Option(t,v)));
 function setScale(v){
-  $('#scale').value=v;$('#scnote').textContent=SCN[v];
-  $('#pctbox').hidden=$('#pctr').hidden=v!=='custom';
+  $('#scale').value=v;nupUI();
 }
 function setPct(v){
   v=Math.max(10,Math.min(400,Math.round(parseFloat(v)||100)));
@@ -1028,6 +1081,7 @@ function pvRender(){
   const list=selPages();
   if(!list.length){stage.append(el('div',{className:'empty mut',textContent:'No pages selected. Go back and tick the pages to print.'}));return}
   PW=pvNeedPw();
+  if(nupN()>1){pvRenderN(list);return}
   if(tfActive()){pvRenderT(list);return}
   const q=params()+'&pw='+PW,step=dupOn()?2:1,w=pvSheetW()+'px',n=list.length;
   for(let i=0;i<n;i+=step){
@@ -1042,11 +1096,32 @@ function pvRender(){
   }
   pvInfo(q);
 }
+/* many pages on one sheet: the preview shows the finished sheets, exactly what Print and Save PDF make */
+function pvRenderN(list){
+  const stage=$('#pvstage'),NU=nupN(),sheets=[];
+  for(let i=0;i<list.length;i+=NU)sheets.push(list.slice(i,i+NU));
+  const q=params()+'&pw='+PW+'&nup='+NU+`&g0=${list[0].f}:${list[0].p}`;
+  const step=dupOn()?2:1,w=pvSheetW()+'px',n=sheets.length;
+  for(let i=0;i<n;i+=step){
+    const row=el('div',{className:'pvrow'});
+    sheets.slice(i,i+step).forEach((g,k)=>{
+      const s=i+k,a=s*NU+1,b=s*NU+g.length;
+      const im=el('img',{alt:'',loading:'lazy',
+        src:`/api/preview?f=${g[0].f}&p=${g[0].p}&${q}&pg=${g.map(p=>p.f+':'+p.p).join(',')}`});
+      const cap=(step===2?(k===0?'Front':'Back')+' · ':'')+`Sheet ${s+1} of ${n} · page${b>a?'s '+a+'–'+b:' '+a}`;
+      const sh=el('div',{className:'pvsheet'},im,el('small',{className:'mut',textContent:cap}));
+      sh.style.width=w;row.append(sh);
+    });
+    stage.append(row);
+  }
+  pvInfo(q);
+}
 async function pvInfo(q){
   try{
     const a=await (await api('/api/area?'+q)).json();
     $('#pvinfo').textContent=(a.driver?'From the printer driver: ':'Estimated (driver gave no area): ')+
       `paper ${a.pw.toFixed(0)} × ${a.ph.toFixed(0)} mm, printable area ${a.aw.toFixed(0)} × ${a.ah.toFixed(0)} mm.`+
+      (nupN()>1?` ${nupN()} pages on each sheet.`:'')+
       (dupOn()?' Two-sided: front and back are shown together.':'');
   }catch{$('#pvinfo').textContent=''}
 }
@@ -1073,8 +1148,8 @@ function buildJob(s){
     duplex:CAPS&&CAPS.duplex?$('#duplex').value:'off',orient:orient(),copies,
     profile:$('#profile').value||'',scale:$('#scale').value,pct:setPct($('#pct').value),
     w:(pp&&pp.w)||210,h:(pp&&pp.h)||297,
-    num:NUM,pages:s.map(p=>[p.f,p.p]),title:jobTitle(s)};
-  if(tfActive()){   // free layout from the Transform tool (kept even when the Transform button is switched off)
+    num:NUM,pages:s.map(p=>[p.f,p.p]),title:jobTitle(s),nup:nupN()};
+  if(nupN()===1&&tfActive()){   // free layout from the Transform tool (kept even when the Transform button is switched off)
     const lay={},sh=tfSheets(s);
     body.pages=sh.map(p=>p.extra?[p.f,p.p,p.k]:[p.f,p.p]);
     for(const p of sh){
@@ -1500,6 +1575,7 @@ $('#tfReset').onclick=()=>{const b=tfTargetBox(null);if(!b)return;tfSnap();if(TF
 $('#tfResetAll').onclick=()=>{tfSnap();TFX=[];Object.keys(LAY).forEach(k=>delete LAY[k]);TFDEL.forEach(k=>setSel(k,true));TFDEL.clear();updateCount();TF.sel=null;pvRender()};
 $('#tfPage').onclick=tfAddPage;
 $('#btf').onclick=()=>{
+  if(nupN()>1)return toast('Transform is not available while "Many pages on one sheet" is on.\nTurn that off first.');
   TF.on=!TF.on;$('#btf').classList.toggle('on',TF.on);
   if(!TF.on){TF.sel=null;if(tfActive())toast('Your Transform changes are kept for printing.\nTurn Transform on and press Reset all to undo them.')}
   tfSync();pvRender();
@@ -1509,13 +1585,16 @@ $('#pvstage').addEventListener('pointerdown',e=>{
 });
 
 /* ---- R key in the preview works even when Transform is off: turns the page under the mouse ---- */
-let PVH=null;
-$('#pvstage').addEventListener('pointermove',e=>{PVH=e.target.closest?e.target.closest('.pvsheet'):null});
-function hoverSheetIdx(){
-  const all=[...document.querySelectorAll('#pvstage .pvsheet')];
-  if(PVH&&all.includes(PVH))return all.indexOf(PVH);
-  const st=$('#pvstage').getBoundingClientRect();
-  return all.findIndex(x=>x.getBoundingClientRect().bottom>st.top+40);
+/* R with the pointer ON a page turns only that page. R with the pointer anywhere else (side panel, top bar, gaps,
+   outside the window) turns ALL pages together. The pointer position is read at the moment R is pressed, so
+   scrolling or a redraw under a still pointer is always handled correctly. */
+let PTR=null;
+document.addEventListener('pointermove',e=>{PTR={x:e.clientX,y:e.clientY}},true);
+document.documentElement.addEventListener('mouseleave',()=>{PTR=null});
+function hoverSheetIdx(){   // index of the page under the pointer, or -1 when the pointer is not on a page
+  if(!PTR)return -1;
+  const t=document.elementFromPoint(PTR.x,PTR.y),sh=t&&t.closest?t.closest('#pvstage .pvsheet'):null;
+  return sh?[...document.querySelectorAll('#pvstage .pvsheet')].indexOf(sh):-1;
 }
 function fitItem(it,inf,a){   // default size of a picture for the current Scaling mode, at its current rotation
   const m=$('#scale').value,odd=Math.round(it.rot/90)%2!==0,iw=odd?inf.h:inf.w,ih=odd?inf.w:inf.h;let s;
@@ -1527,25 +1606,35 @@ function fitItem(it,inf,a){   // default size of a picture for the current Scali
 }
 async function pageRotate(deg){
   if(STEP!==2)return;
+  if(nupN()>1)return toast('Turning a page is not available while "Many pages on one sheet" is on.');
   const list=selPages();if(!list.length)return;
   const sheets=tfActive()?tfSheets(list):list,i=hoverSheetIdx();
-  if(i<0||!sheets[i])return;
-  const p=sheets[i],k=kk(p);
+  const targets=i>=0&&sheets[i]?[sheets[i]]:sheets;   // pointer on a page = that page only, anywhere else = all pages
   let a=TFA;try{a=await (await api('/api/area?'+params()+'&pw='+PW)).json()}catch{}
   if(!a||!a.aw)return;
-  if(!p.extra&&!INFO[k]){try{const j=await (await api(`/api/pageinfo?f=${p.f}&p=${p.p}`)).json();if(j.w)INFO[k]=j}catch{}}
-  let L=LAY[k];
-  if(!L){if(!INFO[k])return;L={items:[defItem(INFO[k],a,p.f,p.p)],touched:false};LAY[k]=L}
+  await Promise.all(targets.map(async p=>{
+    const k=kk(p);
+    if(!p.extra&&!INFO[k]){try{const j=await (await api(`/api/pageinfo?f=${p.f}&p=${p.p}`)).json();if(j.w)INFO[k]=j}catch{}}
+  }));
   tfSnap();
-  const inf=INFO[k];
-  let refit=false;
-  if(inf&&L.items.length===1){   // refit only if the picture is still at its default size (not hand-resized)
-    const it=L.items[0],d=fitItem(it,inf,a);
-    refit=Math.abs(it.w-d.w)<.5&&Math.abs(it.h-d.h)<.5&&Math.abs(it.cx-d.cx)<.5&&Math.abs(it.cy-d.cy)<.5;
-  }
-  L.items.forEach(it=>{it.rot=(((it.rot+deg)%360)+360)%360});
-  if(refit)L.items[0]=fitItem(L.items[0],inf,a);
-  L.touched=true;TF.sel=null;
+  let n=0;
+  targets.forEach(p=>{
+    const k=kk(p);
+    let L=LAY[k];
+    if(!L){if(!INFO[k])return;L={items:[defItem(INFO[k],a,p.f,p.p)],touched:false};LAY[k]=L}
+    const inf=INFO[k];
+    let refit=false;
+    if(inf&&L.items.length===1){   // refit only if the picture is still at its default size (not hand-resized)
+      const it=L.items[0],d=fitItem(it,inf,a);
+      refit=Math.abs(it.w-d.w)<.5&&Math.abs(it.h-d.h)<.5&&Math.abs(it.cx-d.cx)<.5&&Math.abs(it.cy-d.cy)<.5;
+    }
+    L.items.forEach(it=>{it.rot=(((it.rot+deg)%360)+360)%360});
+    if(refit)L.items[0]=fitItem(L.items[0],inf,a);
+    L.touched=true;n++;
+  });
+  if(!n)return;
+  TF.sel=null;
+  if(targets.length>1)toast(`All ${n} pages turned ${deg>0?'right':'left'}`);
   TFSCROLL=$('#pvstage').scrollTop;pvRender();
 }
 
