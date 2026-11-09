@@ -64,7 +64,7 @@ def start_tray():
         import pystray._win32  # noqa: makes PyInstaller bundle the Windows backend
         menu = pystray.Menu(pystray.MenuItem("Open PC Print", lambda icon, item: front(), default=True),
                             pystray.MenuItem("Quit", lambda icon, item: quit_app()))
-        tray = pystray.Icon("PCPrint", tray_image(), "PC Print", menu)
+        tray = pystray.Icon("PCPrint", tray_image(), "PC Print - Imranul Hoque Sabbir", menu)
         tray.run_detached()
         return True
     except Exception:
@@ -274,7 +274,7 @@ def main():
     global win
     tray_ok = start_tray()
     win = webview.create_window("PC Print", f"http://127.0.0.1:{port}/", width=1120, height=820,
-                                min_size=(720, 520),
+                                min_size=(480, 400),
                                 hidden=startup and tray_ok,        # started by Windows: only the tray icon
                                 minimized=startup and not tray_ok)
 

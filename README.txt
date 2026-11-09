@@ -1,4 +1,5 @@
 PrintMerged = PC Print + Phone Print (one program)
+Made by Imranul Hoque Sabbir.
 
 Run:    pip install -r requirements.txt   then   python app.py
 Build:  pyinstaller --noconsole --onefile --add-data "static;static" app.py
@@ -43,3 +44,10 @@ SAVE PDF  (step 2, top right: "Save PDF" and the folder button)
 
 TRANSFORM:  Shift + drag = the picture(s) move dead straight (sideways, up / down or exactly diagonal). Works for moving and for
    Alt + drag copying. While Shift is held the picture stays on its page.
+
+
+WINDOW SIZE / FEEDBACK
+ The window can be any size (min 480 x 400): the top bar shortens its labels, the side panels slide away below 1100 px
+ (open them with the buttons: they open on top of the page), the Transform strip wraps instead of cutting buttons off.
+ While you drag / copy / resize in Transform, a small read-out follows the mouse (Move / Copy / Resize with the numbers), the picture lifts,
+ the page it will land on says 'Move to page N', and rotate / center / copy / paste / delete / undo show a short confirmation.
