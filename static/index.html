@@ -42,7 +42,7 @@ body.s1 .s2only,body.s2 .s1only{display:none!important}
 .zg{display:flex;gap:4px;align-items:center}
 .zg #rz{min-width:56px}
 .dd{position:relative}
-.pop{position:absolute;top:calc(100% + 8px);left:0;width:340px;z-index:20;box-shadow:0 8px 30px rgba(0,0,0,.35);margin:0}
+.pop{position:absolute;top:calc(100% + 8px);left:0;width:min(340px,calc(100vw - 20px));max-height:calc(100vh - 70px);overflow:auto;z-index:20;box-shadow:0 8px 30px rgba(0,0,0,.35);margin:0}
 .pop p{margin:4px 0}
 .phtabs{display:flex;width:100%;margin-bottom:10px;align-self:auto}.phtabs button{flex:1}
 .sw{appearance:none;-webkit-appearance:none;width:38px;height:22px;border-radius:11px;background:var(--bd);position:relative;cursor:pointer;border:0;padding:0;flex:none;transition:background .15s}
@@ -55,14 +55,14 @@ body.s1 .s2only,body.s2 .s1only{display:none!important}
 /* ---------- layout: sliding side panel + full stage ---------- */
 .main{flex:1;min-height:0;display:flex;position:relative;overflow:hidden}
 .side{flex:none;overflow:auto;padding:10px;background:var(--card);border-right:1px solid var(--bd);transition:margin-left .25s ease,margin-right .25s ease}
-#sideA{width:var(--lw,320px)}
-#sideB{width:var(--rw,320px);border-right:0;border-left:1px solid var(--bd)}
-.main.collapsed #sideA{margin-left:calc(-1*var(--lw,320px) - 1px)}
+#sideA{width:min(var(--lw,320px),28vw)}
+#sideB{width:min(var(--rw,320px),28vw);border-right:0;border-left:1px solid var(--bd)}
+.main.collapsed #sideA{margin-left:calc(-1*min(var(--lw,320px),28vw) - 1px)}
 .rsz{flex:none;width:6px;margin:0 -3px;z-index:7;cursor:col-resize;background:transparent;touch-action:none;position:relative}
 .rsz:hover,body.rszing .rsz{background:var(--pri);opacity:.55}
 body.rszing{cursor:col-resize;user-select:none;-webkit-user-select:none}
 .main.collapsed #rszL{display:none}
-.main.collapsedR #sideB{margin-right:calc(-1*var(--rw,320px) - 1px)}   /* right panel (Print settings) slides away like the left one */
+.main.collapsedR #sideB{margin-right:calc(-1*min(var(--rw,320px),28vw) - 1px)}   /* right panel (Print settings) slides away like the left one */
 .main.collapsedR #rszR{display:none}
 .side h3{margin:0 0 8px;font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--mut)}
 .side p.mut{margin:3px 0;font-size:12px}
@@ -123,7 +123,7 @@ body.rszing{cursor:col-resize;user-select:none;-webkit-user-select:none}
 .tfclip,.tfui{position:absolute}
 .tfclip{overflow:hidden}
 .pvsheet .tfclip img.tfi{position:absolute;display:block;max-width:none;min-height:0;border-radius:0;box-shadow:none;background:none;pointer-events:none}
-.tfh{position:absolute;cursor:move}
+.tfh{position:absolute;cursor:grab}
 .tfdragging .tfh{pointer-events:none!important}
 .tfcap{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:2px}
 .tfcap small{margin:0!important}
@@ -139,19 +139,19 @@ body.rszing{cursor:col-resize;user-select:none;-webkit-user-select:none}
 
 /* bottom dock: a slim strip under the page, always the same height (no layout jumps) */
 #tfdock{position:relative;flex:none;container-type:inline-size;padding:6px 10px;background:var(--card);border-top:1px solid var(--bd);display:flex;flex-direction:column;gap:6px}
-.tfrow{display:flex;gap:5px;align-items:center;flex-wrap:nowrap;min-width:0}
+.tfrow{display:flex;gap:5px 5px;align-items:center;flex-wrap:wrap;min-width:0}
 .tbtn{display:inline-flex;align-items:center;gap:5px;padding:4px 9px;border-radius:8px;font-size:12.5px;white-space:nowrap}
 .tfrow .tbtn{height:30px;flex:none}
 .tbtn kbd{font:600 10px ui-monospace,Consolas,monospace;border:1px solid var(--bd);border-bottom-width:2px;border-radius:4px;padding:0 4px;color:var(--mut);background:var(--bg)}
 .tbtn.dng{color:#dc2626}
 .tfright{display:flex;gap:5px;margin-left:auto}
 .tsep{width:1px;height:20px;background:var(--bd);margin:0 3px;flex:none}
-.tfedit{height:30px;padding:0;border:0;gap:12px;overflow:hidden}
-#tfhint{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;font-size:12px}
-#tfflds{display:flex;flex-wrap:nowrap;gap:4px 14px;align-items:center}
+.tfedit{min-height:30px;padding:0;border:0;gap:6px 12px;overflow:visible}
+#tfhint{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;max-width:100%;font-size:12px}
+#tfflds{display:flex;flex-wrap:wrap;gap:4px 14px;align-items:center;min-width:0}
 .tfg{display:flex;flex-direction:row;align-items:center;gap:6px}
 .tfg .gl{display:none}
-.tfg .rr{display:flex;gap:5px;align-items:center}
+.tfg .rr{display:flex;gap:5px;align-items:center;flex-wrap:wrap}
 .tfg .fl{display:flex;flex-direction:row;align-items:center;gap:4px}
 .tfg .fl label{font-size:11.5px;color:var(--mut);font-weight:600}
 .tfg input{width:74px;height:28px;padding:2px 6px;text-align:right;border-radius:7px}
@@ -166,7 +166,7 @@ body.rszing{cursor:col-resize;user-select:none;-webkit-user-select:none}
   .tfrow .tbtn .t,.tfrow .tbtn kbd{display:none}
   .tfrow .tbtn{padding:4px 8px}
 }
-.tfhelp{position:absolute;right:0;bottom:calc(100% + 8px);width:370px;max-width:92%;z-index:12;background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:12px 14px;box-shadow:0 8px 30px rgba(0,0,0,.4);font-size:12.5px}
+.tfhelp{position:absolute;right:0;bottom:calc(100% + 8px);width:370px;max-width:92%;max-height:calc(100vh - 160px);overflow:auto;z-index:12;background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:12px 14px;box-shadow:0 8px 30px rgba(0,0,0,.4);font-size:12.5px}
 .tfhelp div{display:flex;justify-content:space-between;gap:12px;padding:3px 0;border-bottom:1px solid var(--bd)}
 .tfhelp div:last-child{border:0}
 .tfhelp b{font-weight:600}
@@ -177,24 +177,87 @@ body.rszing{cursor:col-resize;user-select:none;-webkit-user-select:none}
 #updmodal h3{margin:0 0 8px}
 #updnotes{white-space:pre-line;max-height:130px;overflow:auto;background:var(--bg);border:1px solid var(--bd);border-radius:8px;padding:6px 8px;font-size:12px}
 #updbar{width:100%;height:10px;border-radius:5px;overflow:hidden;background:var(--bd)}#updbar i{display:block;height:100%;width:0;background:var(--pri);transition:width .2s}
-@media(max-width:900px){
-  .side{position:absolute;z-index:6;top:0;bottom:0;max-width:88%;box-shadow:4px 0 24px rgba(0,0,0,.35)}
+@media(max-width:1100px){
+  .side{position:absolute;z-index:6;top:0;bottom:0;width:min(var(--lw,320px),86vw)!important;max-width:88%;box-shadow:4px 0 24px rgba(0,0,0,.35)}
   #sideA{left:0}
   #sideB{right:0}
   .main.collapsed #sideA{margin-left:-110%}
   .main.collapsedR #sideB{margin-right:-110%}
   .rsz{display:none}
 }
+
+/* ===== responsive: the window can be any size (snapped, tiled, tiny) ===== */
+#credit{font-size:11.5px;color:var(--mut);white-space:nowrap;margin:0 6px 0 0;align-self:center}
+.about{margin-top:8px;padding-top:8px;border-top:1px solid var(--bd);font-size:12px;color:var(--mut)}
+.about b{color:var(--tx)}
+@media(max-width:1250px){#credit{display:none}}
+@media(max-width:1100px){#bar .row{gap:4px}#bar button{padding:5px 8px}.zg #rz{min-width:48px}}
+@media(max-width:820px){.lbl2{display:none}#bar h1 .nm{display:none}.empty .big{font-size:17px}.empty button{font-size:14px;padding:10px 18px}}
+@media(max-width:560px){#bar{padding:4px 6px}#bar button{padding:4px 7px}#pages,.pvstage{padding:6px}.tfhelp{width:94vw}.thg{grid-template-columns:repeat(auto-fill,minmax(70px,1fr))}.tn{height:96px}}
+@media(max-height:620px){#bar{padding:3px 8px}#tfdock{padding:4px 8px;gap:4px}.pill{top:6px;padding:6px 14px}}
+@container (max-width:640px){
+  .tfg input{width:66px}
+  .tfg .rr{gap:4px}
+  .tbtn{padding:4px 7px}
+}
+@container (max-width:420px){
+  .tfrow .tbtn.hideS{display:none}
+  .seg button{padding:3px 6px}
+}
+
+/* ===== Transform: icons, motion and live feedback while dragging / resizing / copying / rotating ===== */
+button{transition:transform .09s ease,border-color .14s,filter .14s,background-color .14s,box-shadow .14s}
+button:active:not(:disabled){transform:scale(.95)}
+#v1,#v2{animation:vin .22s ease both}
+@keyframes vin{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.rp{transition:width .16s ease}
+.tfh{transition:outline-color .12s,background-color .15s,box-shadow .18s}
+.tfh:hover{background:rgba(37,99,235,.07)}
+.tfh.sel{background:rgba(37,99,235,.10)}
+.tfh .hd{transition:transform .12s ease,background-color .12s,box-shadow .12s;box-shadow:0 1px 4px rgba(0,0,0,.35)}
+.tfh .hd::before{content:'';position:absolute;inset:-8px}               /* bigger grab area, easier to hit */
+.tfh .hd:hover{transform:scale(1.4);background:var(--pri)}
+.tfbox.tfanim .tfi,.tfbox.tfanim .tfh{transition:transform .3s cubic-bezier(.3,.7,.2,1),left .24s ease,top .24s ease,width .24s ease,height .24s ease}
+/* while a picture is carried: it lifts off the page */
+.pvsheet .tfclip img.tfi.lift{box-shadow:0 12px 28px rgba(0,0,0,.45);opacity:.93}
+.tfh.lift{outline:2px solid var(--pri);outline-style:solid;background:rgba(37,99,235,.14)}
+.tfh.lift.cp{outline-style:dashed;outline-color:#16a34a;background:rgba(22,163,74,.14)}
+.tfh.lift.rs{outline-color:#f59e0b;background:rgba(245,158,11,.12)}
+body.tfbusy,body.tfbusy *{cursor:var(--tfcur,grabbing)!important}
+body.tfbusy{user-select:none;-webkit-user-select:none}
+/* new / pasted / copied pictures fade in and send out a ring */
+.tfi.born{animation:tffade .35s ease both}
+.tfh.born{animation:tfring .6s ease-out both}
+@keyframes tffade{from{opacity:0}to{opacity:1}}
+@keyframes tfring{from{box-shadow:0 0 0 0 rgba(37,99,235,.8)}to{box-shadow:0 0 0 18px rgba(37,99,235,0)}}
+/* the page the picture will land on */
+.tfbox.tfdrop::before{content:attr(data-drop);position:absolute;left:50%;top:10px;transform:translateX(-50%);z-index:6;background:var(--pri);color:#fff;font-weight:700;font-size:13px;padding:5px 14px;border-radius:16px;box-shadow:0 4px 14px rgba(0,0,0,.35);pointer-events:none;white-space:nowrap;animation:tfchip .16s ease both}
+.tfbox.tfdrop.cp::before{background:#16a34a}
+@keyframes tfchip{from{opacity:0;transform:translateX(-50%) translateY(-6px)}to{opacity:1;transform:translateX(-50%)}}
+.tfbox{transition:box-shadow .15s}
+/* live read-out that follows the mouse */
+#tfhud{position:fixed;left:0;top:0;z-index:60;pointer-events:none;display:flex;align-items:center;gap:8px;background:rgba(17,20,26,.94);color:#fff;border-radius:11px;padding:6px 11px 6px 8px;font-size:12.5px;line-height:1.25;box-shadow:0 6px 20px rgba(0,0,0,.45);opacity:0;transform:scale(.92);transition:opacity .12s ease,transform .12s ease;white-space:nowrap}
+#tfhud.on{opacity:1;transform:scale(1)}
+#tfhud i{font-style:normal;width:24px;height:24px;border-radius:7px;background:var(--pri);display:flex;align-items:center;justify-content:center;font-size:14px;flex:none}
+#tfhud.cp i{background:#16a34a}#tfhud.rs i{background:#f59e0b}#tfhud.st i{background:#8b5cf6}
+#tfhud b{font-weight:700}
+#tfhud span{color:#c7ccd6;font-variant-numeric:tabular-nums}
+/* short confirmation after a button / key action */
+#tfflash{position:fixed;left:50%;top:64px;z-index:55;transform:translate(-50%,-8px);opacity:0;pointer-events:none;display:flex;align-items:center;gap:8px;background:rgba(17,20,26,.94);color:#fff;border-radius:22px;padding:7px 16px 7px 9px;font-weight:600;font-size:13px;box-shadow:0 6px 20px rgba(0,0,0,.4);transition:opacity .18s ease,transform .18s ease;max-width:92vw}
+#tfflash.on{opacity:1;transform:translate(-50%,0)}
+#tfflash i{font-style:normal;width:24px;height:24px;border-radius:50%;background:var(--pri);display:flex;align-items:center;justify-content:center;font-size:14px;flex:none}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
 </style>
 </head>
 <body class="s1">
 <div id="bar"><div class="row">
   <button id="bside" title="Show / hide the side panel">☰</button>
-  <h1>🖨 PC Print</h1>
+  <h1 title="PC Print · made by Imranul Hoque Sabbir">🖨<span class="nm"> PC Print</span></h1>
+  <span id="credit" title="Made by Imranul Hoque Sabbir">by Imranul Hoque Sabbir</span>
   <span id="stepname" class="mut">Step 1 of 2 · Check pages</span>
 
   <span class="row" style="gap:6px">
-    <button id="add" class="p">＋ Add files</button>
+    <button id="add" class="p" title="Add files">＋<span class="lbl2"> Add files</span></button>
     <button id="bpaste" title="Paste copied files or a copied picture (Ctrl+V)">📋<span class="lbl"> Paste</span></button>
   </span>
   <div class="dd">
@@ -259,24 +322,25 @@ body.rszing{cursor:col-resize;user-select:none;-webkit-user-select:none}
     <button id="zin" class="s" title="Zoom in (Ctrl + wheel)">＋</button>
     <button id="rfit" class="s" title="Fit one whole page on the screen">⤢<span class="lbl"> Fit page</span></button>
   </span>
-  <button id="btf" class="s s2only" title="Free layout: move, resize, rotate and copy pictures anywhere on the sheet">✥ Transform</button>
+  <button id="btf" class="s s2only" title="Free layout: move, resize, rotate and copy pictures anywhere on the sheet">✥<span class="lbl"> Transform</span></button>
 
   <span class="grow"></span>
   <div class="dd" id="upddd">
-    <button id="bupd" title="Check for a new version of PC Print">⟳ Updates<span id="updbadge" class="pillb" hidden style="margin-left:6px">new</span></button>
+    <button id="bupd" title="Check for a new version of PC Print">⟳<span class="lbl"> Updates</span><span id="updbadge" class="pillb" hidden style="margin-left:6px">new</span></button>
     <div id="updpanel" class="card pop" hidden style="left:auto;right:0">
       <div class="row" style="justify-content:space-between"><span class="name">Auto update</span><input type="checkbox" id="updauto" class="sw"></div>
       <p class="mut">ON: PC Print looks for a new version on GitHub, tells you, asks, then updates itself. OFF: it never looks and never shows anything about updates.</p>
       <p class="mut" id="updver"></p>
       <div class="row"><button id="updcheck" class="s">Check for updates now</button><button id="updnow" class="p s" hidden>Update now…</button></div>
       <p class="mut" id="updmsg"></p>
+      <div class="about">PC Print · made by <b>Imranul Hoque Sabbir</b></div>
       <label id="autolbl" class="row" hidden title="Open PC Print minimized when Windows starts" style="margin-top:6px;border-top:1px solid var(--bd);padding-top:8px"><input type="checkbox" id="auto"> <span class="name">Start with Windows</span></label>
     </div>
   </div>
-    <button id="bopen" class="p s1only">Preview &amp; Print →</button>
-  <button id="close" class="s2only">← Back to pages</button>
+    <button id="bopen" class="p s1only" title="Preview &amp; Print">Preview<span class="lbl2"> &amp; Print</span> →</button>
+  <button id="close" class="s2only" title="Back to pages">←<span class="lbl2"> Back to pages</span></button>
   <div class="dd s2only" id="svdd">
-    <button id="bsave" title="Save all selected pages, in this order, with page numbers and your Transform changes, as one PDF in your save folder">💾 Save PDF</button>
+    <button id="bsave" title="Save all selected pages, in this order, with page numbers and your Transform changes, as one PDF in your save folder">💾<span class="lbl"> Save PDF</span></button>
     <button id="bsdir" class="s" title="Choose the save folder / file name">📁</button>
     <div id="svpanel" class="card pop" hidden style="left:auto;right:0">
       <div class="name">Save PDF to</div>
@@ -286,7 +350,7 @@ body.rszing{cursor:col-resize;user-select:none;-webkit-user-select:none}
       <p class="mut">Every page you ticked is saved in the same order as it prints, with the page numbers and everything you changed in Transform. Next time it saves straight into this folder.</p>
     </div>
   </div>
-  <button id="bprint" class="p s2only">🖨 Print</button>
+  <button id="bprint" class="p s2only" title="Print">🖨<span class="lbl2"> Print</span></button>
   <button id="bsideR" class="s2only" title="Show / hide the print settings">☰</button>
 </div></div>
 
@@ -316,6 +380,7 @@ body.rszing{cursor:col-resize;user-select:none;-webkit-user-select:none}
       <div class="big">No file open</div>
       <div class="mut">PDF and images only. Drag files here, press Ctrl+V to paste, or right-click a file → Open with → PC Print.</div>
       <button id="add2" class="p">Choose files</button>
+      <div class="mut" style="margin-top:18px">Made by Imranul Hoque Sabbir</div>
     </div>
     <div id="pages"></div>
   </section>
@@ -328,12 +393,12 @@ body.rszing{cursor:col-resize;user-select:none;-webkit-user-select:none}
       <div class="tfrow">
         <button id="tfAdd" class="tbtn p" title="Add another picture to this page (you can also drop or paste it onto the sheet)">＋ Picture</button>
         <button id="tfPaste" class="tbtn" title="Paste a copied picture onto this page (Ctrl+V)" aria-label="Paste">📋</button>
-        <button id="tfPage" class="tbtn" title="Add a new blank page after the current one">＋ Page</button>
+        <button id="tfPage" class="tbtn hideS" title="Add a new blank page after the current one">＋ Page</button>
         <span class="tsep"></span>
         <button id="tfAll" class="tbtn" title="Select every picture on this page (Ctrl+A)">☑<span class="t"> All</span></button>
         <button id="tfDup" class="tbtn" title="Duplicate the selected pictures on this page (Ctrl+D, or hold Alt and drag). Ctrl+C / Ctrl+X / Ctrl+V copy, cut and paste between pages.">⧉<span class="t"> Copy</span></button>
         <button id="tfRot90" class="tbtn" title="Rotate 90° clockwise (R, Shift+R = back)">⟳<span class="t"> Rotate 90°</span> <kbd>R</kbd></button>
-        <button id="tfCenter" class="tbtn" title="Center on the page">⌖<span class="t"> Center</span></button>
+        <button id="tfCenter" class="tbtn hideS" title="Center on the page">⌖<span class="t"> Center</span></button>
         <button id="tfDel" class="tbtn dng" title="Delete the selected pictures (Delete key)">🗑</button>
         <span class="tfright">
           <button id="tfReset" class="tbtn" title="Reset page: put this page back to the normal layout">↺<span class="t"> Reset page</span></button>
@@ -459,6 +524,8 @@ body.rszing{cursor:col-resize;user-select:none;-webkit-user-select:none}
   </div>
 </div>
 
+<div id="tfhud" aria-hidden="true"></div>
+<div id="tfflash" role="status" aria-live="polite"></div>
 <script>
 const $=s=>document.querySelector(s);
 let FILES=[],REV=-1,CAPS=null,STEP=1,SREV=-1,PRN={},prT=null;
@@ -691,8 +758,25 @@ $('#bsideR').onclick=()=>{   // same as the left button, for the Print settings 
   $('#main').classList.toggle('collapsedR');
   setTimeout(()=>{zoomBy(1)},300);
 };
-if(innerWidth<900){$('#main').classList.add('collapsed');$('#main').classList.add('collapsedR')}
-let rsT=null;window.addEventListener('resize',()=>{clearTimeout(rsT);rsT=setTimeout(()=>zoomBy(1),250)});
+/* the window may be any size: below 1100 px the side panels slide away by themselves (they open on top of the page with the
+   buttons), and come back when the window is wide again - only the ones that were open before */
+let NARROW=innerWidth<1100,AUTOC={l:false,r:false};
+if(NARROW){$('#main').classList.add('collapsed');$('#main').classList.add('collapsedR')}
+function fitPops(){   // a pop-up window never leaves the screen
+  document.querySelectorAll('.pop:not([hidden])').forEach(p=>{
+    p.style.translate='';const r=p.getBoundingClientRect();let dx=0;
+    if(r.right>innerWidth-8)dx=innerWidth-8-r.right;
+    if(r.left+dx<8)dx=8-r.left;
+    if(dx)p.style.translate=dx+'px 0';
+  });
+}
+new MutationObserver(fitPops).observe(document.getElementById('bar'),{attributes:true,subtree:true,attributeFilter:['hidden']});
+let rsT=null;window.addEventListener('resize',()=>{
+  const m=$('#main'),nar=innerWidth<1100;
+  if(nar&&!NARROW){AUTOC.l=!m.classList.contains('collapsed');AUTOC.r=!m.classList.contains('collapsedR');m.classList.add('collapsed','collapsedR')}
+  else if(!nar&&NARROW){if(AUTOC.l)m.classList.remove('collapsed');if(AUTOC.r)m.classList.remove('collapsedR');AUTOC.l=AUTOC.r=false}
+  NARROW=nar;fitPops();
+  clearTimeout(rsT);rsT=setTimeout(()=>zoomBy(1),200)});
 
 /* ---------------- drag the panel edges to make them wider / narrower ---------------- */
 function initRsz(hid,side){
@@ -1271,7 +1355,9 @@ function place(e,it){
   const a=TFA;
   e.style.left=(it.cx-it.w/2)/a.aw*100+'%';e.style.top=(it.cy-it.h/2)/a.ah*100+'%';
   e.style.width=it.w/a.aw*100+'%';e.style.height=it.h/a.ah*100+'%';
-  e.style.transform=`rotate(${it.rot}deg)`;
+  let ang=it.rot;                                       // 270 -> 0 turns the short way (+90), never 270 degrees back
+  if(e._ang!==undefined)ang=e._ang+((it.rot-e._ang)%360+540)%360-180;
+  e._ang=ang;e.style.transform=`rotate(${ang}deg)`;
 }
 async function pvRenderT(list){
   list=tfSheets(list);
@@ -1378,21 +1464,38 @@ function tfDown(e,box,i){
   }
   tfDrag(e,box,idx,'move',null,()=>{   // plain click (no drag) on one of several: keep only that one
     if(!e.altKey&&had&&idx.length>1){tfSetSel(k,[i]);tfSelChanged()}
-  });
+  },e.altKey);
 }
 function snapStraight(dx,dy){   // Shift while dragging: sideways, up / down or exactly diagonal (whichever is closest)
   if(!dx&&!dy)return[dx,dy];
   const a=Math.round(Math.atan2(dy,dx)/(Math.PI/4))*(Math.PI/4),ux=Math.cos(a),uy=Math.sin(a),t=dx*ux+dy*uy;
   return[t*ux,t*uy];
 }
-function tfDrag(e,box,idx,mode,hd,onClick){
+function tfHud(ev,cls,icon,title,detail){   // live read-out next to the mouse
+  const h=$('#tfhud');
+  if(h._c!==cls+icon+title){h._c=cls+icon+title;h.className=(h.classList.contains('on')?'on ':'')+cls;h.innerHTML='';h.append(el('i',{textContent:icon}),el('b',{textContent:title}),el('span',{textContent:detail}))}
+  else h.lastChild.textContent=detail;
+  const w=h.offsetWidth,hh=h.offsetHeight;
+  let x=ev.clientX+18,y=ev.clientY+20;
+  if(x+w>innerWidth-6)x=ev.clientX-w-14;if(y+hh>innerHeight-6)y=ev.clientY-hh-14;
+  h.style.left=Math.max(4,x)+'px';h.style.top=Math.max(4,y)+'px';h.classList.add('on');
+}
+function tfHudOff(){const h=$('#tfhud');h.classList.remove('on');h._c=''}
+function tfDrag(e,box,idx,mode,hd,onClick,isCopy){
   const k=box._k,L=LAY[k],items=idx.map(i=>L.items[i]),os=items.map(it=>({...it}));
   const r=box._ui.getBoundingClientRect(),kx=r.width/TFA.aw;   // screen pixels per mm
-  const x0=e.clientX,y0=e.clientY;let moved=false,straight=false;
-  const mv=ev=>{
+  const x0=e.clientX,y0=e.clientY;let moved=false,straight=false,raf=0,last=e,dropBox=null;
+  const un=TF.unit,u=UN[un],fmt=v=>String(+(v/u).toFixed(un==='mm'?1:un==='cm'?2:3));
+  const hl=[...idx.map(i=>box._hit[i]),...idx.map(i=>box._vis[i])].filter(Boolean);
+  const cls=mode==='rs'?'rs':isCopy?'cp':'';
+  const step=ev=>{
+    raf=0;
     if(!moved&&Math.hypot(ev.clientX-x0,ev.clientY-y0)<3)return;
     if(!moved){
       tfSnap();
+      document.documentElement.style.setProperty('--tfcur',mode==='rs'?(HANDLES.find(h=>h[0]===hd[0]&&h[1]===hd[1])||[0,0,'move'])[2]+'-resize':isCopy?'copy':'grabbing');
+      document.body.classList.add('tfbusy');
+      hl.forEach(n=>{n.classList.add('lift');if(cls)n.classList.add(cls)});
       if(mode==='move'){document.body.classList.add('tfdragging');box.classList.add('tfsrc');box._clip.style.overflow='visible'}
     }
     moved=true;
@@ -1413,20 +1516,35 @@ function tfDrag(e,box,idx,mode,hd,onClick){
     }
     L.touched=true;tfPlaceAll(box);tfSync();
     if(mode==='move'){
-      document.querySelectorAll('.tfdrop').forEach(b=>b.classList.remove('tfdrop'));
-      const tb=straight?null:tfBoxAt(ev);if(tb&&tb!==box)tb.classList.add('tfdrop');   // Shift = stay on this page
+      document.querySelectorAll('.tfdrop').forEach(b=>{b.classList.remove('tfdrop','cp')});
+      const tb=straight?null:tfBoxAt(ev);dropBox=(tb&&tb!==box)?tb:null;   // Shift = stay on this page
+      if(dropBox){dropBox.classList.add('tfdrop');dropBox.classList.toggle('cp',!!isCopy);
+        dropBox.dataset.drop=(isCopy?'Copy to page ':'Move to page ')+tfPage(dropBox)}
       const st=$('#pvstage').getBoundingClientRect();   // scroll when near the top / bottom edge
       if(ev.clientY<st.top+40)$('#pvstage').scrollTop-=18;else if(ev.clientY>st.bottom-40)$('#pvstage').scrollTop+=18;
+      const it=items[0];
+      const where=items.length>1?`${items.length} pictures`:`X ${fmt(it.cx)}  Y ${fmt(it.cy)} ${un}`;
+      if(straight)tfHud(ev,'st','➔','Straight',where);
+      else if(dropBox)tfHud(ev,isCopy?'cp':'','➜',isCopy?'Copy':'Move','to page '+tfPage(dropBox));
+      else tfHud(ev,isCopy?'cp':'',isCopy?'⧉':'✥',isCopy?'Copy':'Move',where);
+    }else{
+      const it=items[0],o=os[0],pc=Math.round(100*it.w/o.w);
+      tfHud(ev,'rs','⤡','Resize',`${fmt(it.w)} × ${fmt(it.h)} ${un}  ·  ${pc}%`+(ev.shiftKey?'  · free':hd[0]&&hd[1]?'  · locked':''));
     }
   };
+  const mv=ev=>{last=ev;if(!raf)raf=requestAnimationFrame(()=>step(last))};   // one update per screen frame = smooth
   const end=(ev,cancel)=>{
+    if(raf){cancelAnimationFrame(raf);raf=0;if(!cancel)step(ev)}            // the last mouse position is never lost
     const tb=(moved&&mode==='move'&&!cancel&&!straight)?tfBoxAt(ev):null;   // look under the mouse before the dragging state is removed
     window.removeEventListener('pointermove',mv);window.removeEventListener('pointerup',up);window.removeEventListener('pointercancel',cn);
-    document.querySelectorAll('.tfdrop').forEach(b=>b.classList.remove('tfdrop'));
-    document.body.classList.remove('tfdragging');box.classList.remove('tfsrc');box._clip.style.overflow='';
+    document.querySelectorAll('.tfdrop').forEach(b=>{b.classList.remove('tfdrop','cp')});
+    document.body.classList.remove('tfdragging','tfbusy');box.classList.remove('tfsrc');box._clip.style.overflow='';
+    hl.forEach(n=>n.classList.remove('lift','cp','rs'));tfHudOff();
     if(moved&&mode==='move'&&!cancel){
       if(tb&&tb!==box&&LAY[tb._k]){tfMoveAcross(box,tb,idx,os,r,ev.clientX-x0,ev.clientY-y0,kx);return}
+      if(isCopy){tfBorn(k,idx);tfFlash('⧉',items.length>1?`Copied ${items.length} pictures`:'Picture copied')}
     }
+    if(moved&&mode==='rs'&&!cancel){const it=items[0];tfFlash('⤡',`Resized to ${fmt(it.w)} × ${fmt(it.h)} ${un}`)}
     if(!moved&&onClick)onClick();
   };
   const up=ev=>end(ev,false),cn=ev=>end(ev,true);
@@ -1442,8 +1560,10 @@ function tfMoveAcross(src,dst,idx,os,r0,dx,dy,kx){
   const rm=new Set(idx);LS.items=LS.items.filter((_,i)=>!rm.has(i));
   const n=LD.items.length;LD.items.push(...moved);LS.touched=LD.touched=true;
   tfSetSel(dst._k,moved.map((_,t)=>n+t));TF.cur=dst._k;
+  const dn=tfPage(dst);
   if(!LS.items.length)tfDropPage(src._k);
   else{tfBuild(src);tfBuild(dst);tfSelChanged()}
+  tfFlash('➜',`Moved to page ${dn}`);
 }
 let TFSCROLL=null;
 function tfDeletePage(k){   // remove the whole page together with everything on it
@@ -1465,7 +1585,7 @@ function tfDropPage(k){   // a page with no pictures left goes away
 function tfCopy(){
   const its=tfItems();if(!its.length)return false;
   TFCLIP={k:TF.sel.k,n:0,items:its.map(({cx,cy,w,h,rot,f,p})=>({cx,cy,w,h,rot,f,p}))};
-  toast(`Copied ${its.length} picture${its.length>1?'s':''}. Press Ctrl+V on any page.`);return true;
+  tfFlash('⧉',`Copied ${its.length} picture${its.length>1?'s':''} - press Ctrl+V on any page`);return true;
 }
 function tfCut(){if(tfCopy())tfDelete()}
 function tfPasteInternal(box){
@@ -1474,6 +1594,7 @@ function tfPasteInternal(box){
   const off=TFCLIP.k===box._k?5*(++TFCLIP.n):0,n=L.items.length;
   TFCLIP.items.forEach(it=>L.items.push({...it,cx:it.cx+off,cy:it.cy+off}));
   L.touched=true;TF.cur=box._k;tfSetSel(box._k,TFCLIP.items.map((_,t)=>n+t));tfRebuild(box._k);
+  tfBorn(box._k,TFCLIP.items.map((_,t)=>n+t));tfFlash('📋','Pasted on page '+tfPage(tfBoxOf(box._k)));
 }
 function tfAddPage(){
   const sheets=tfSheets(selPages());if(!sheets.length)return;
@@ -1484,7 +1605,7 @@ function tfInsertPage(after){   // a blank white page after the page called "aft
   const t=sheets[0];
   const x={k:'x'+(++tfXn),after,f:t.f,p:t.p,name:t.name,extra:true};
   TFX.push(x);LAY[x.k]={items:[],touched:true};TF.sel=null;TF.cur=x.k;
-  pvRender();
+  pvRender();tfFlash('＋','Blank page added');
   setTimeout(()=>{const nb=tfBoxOf(x.k);if(nb)nb.scrollIntoView({block:'center',behavior:'smooth'})},500);
 }
 window.addEventListener('blur',()=>{TFCLIP=null});
@@ -1502,8 +1623,8 @@ function tfLoad(s){
   o.TFDEL.forEach(k=>setSel(k,false));TFDEL.clear();o.TFDEL.forEach(k=>TFDEL.add(k));
   updateCount();TF.sel=null;pvRender();
 }
-function tfUndo(){const s=TFUND.pop();if(!s)return toast('Nothing to undo');TFRED.push(tfState());tfLoad(s)}
-function tfRedo(){const s=TFRED.pop();if(!s)return toast('Nothing to redo');TFUND.push(tfState());tfLoad(s)}
+function tfUndo(){const s=TFUND.pop();if(!s)return toast('Nothing to undo');TFRED.push(tfState());tfLoad(s);tfFlash('↶','Undone')}
+function tfRedo(){const s=TFRED.pop();if(!s)return toast('Nothing to redo');TFUND.push(tfState());tfLoad(s);tfFlash('↷','Redone')}
 document.addEventListener('copy',e=>{if(TF.on&&STEP===2&&TFCLIP&&e.clipboardData){e.clipboardData.setData('text/plain','PC Print pictures');e.preventDefault()}});
 document.addEventListener('cut',e=>{if(TF.on&&STEP===2&&TFCLIP&&e.clipboardData){e.clipboardData.setData('text/plain','PC Print pictures');e.preventDefault()}});   // after using another program, Ctrl+V means that program's clipboard
 
@@ -1526,10 +1647,20 @@ function tfSync(){
   $('#tfX').disabled=$('#tfY').disabled=multi;
   $('#tfcount').hidden=!multi;$('#tfcount').textContent=`${its.length} selected`;
 }
-function tfTouch(){
+function tfTouch(anim){
   const s=TF.sel;if(!s||!LAY[s.k])return;
-  LAY[s.k].touched=true;const b=tfBoxOf(s.k);if(b)tfPlaceAll(b);tfSync();
+  LAY[s.k].touched=true;const b=tfBoxOf(s.k);if(b){if(anim!==false)tfAnim(b);tfPlaceAll(b)}tfSync();
 }
+function tfAnim(b){b.classList.add('tfanim');clearTimeout(b._at);b._at=setTimeout(()=>b.classList.remove('tfanim'),380)}   // smooth rotate / center / typed size
+function tfFlash(icon,text){   // short confirmation chip at the top of the page
+  const f=$('#tfflash');f.innerHTML='';f.append(el('i',{textContent:icon}),el('span',{textContent:text}));
+  f.classList.add('on');clearTimeout(f._t);f._t=setTimeout(()=>f.classList.remove('on'),1300);
+}
+function tfBorn(k,idxs){   // new pictures fade in and send out a ring, so you see where the copy appeared
+  const b=tfBoxOf(k);if(!b)return;
+  idxs.forEach(i=>{[b._vis[i],b._hit[i]].forEach(n=>{if(n){n.classList.add('born');setTimeout(()=>n.classList.remove('born'),700)}})});
+}
+function tfPage(box){return [...document.querySelectorAll('.tfbox')].indexOf(box)+1}
 ['tfW','tfH','tfX','tfY','tfR'].forEach(id=>{
   const e=$('#'+id);
   e.addEventListener('change',()=>{
@@ -1552,18 +1683,20 @@ document.querySelectorAll('#tfSeg button').forEach(b=>b.onclick=()=>{
 $('#tfLockB').onclick=()=>{TF.lock=!TF.lock;tfSync()};
 $('#tfHelpB').onclick=e=>{e.stopPropagation();$('#tfhelp').hidden=!$('#tfhelp').hidden};
 document.addEventListener('click',e=>{if(!e.target.closest('#tfhelp,#tfHelpB'))$('#tfhelp').hidden=true});
-function tfRotate(deg){if(tfItems().length)tfSnap();tfItems().forEach(it=>{it.rot=(((it.rot+deg)%360)+360)%360});tfTouch()}
+function tfRotate(deg){const n=tfItems().length;if(n)tfSnap();tfItems().forEach(it=>{it.rot=(((it.rot+deg)%360)+360)%360});tfTouch();if(n)tfFlash('⟳','Rotated '+(deg>0?'90° clockwise':'90° back'))}
 function tfDuplicate(){
   const s=TF.sel,its=tfItems();if(!its.length)return;
   const L=LAY[s.k],n=L.items.length;tfSnap();
   its.forEach(it=>L.items.push({...it,cx:it.cx+5,cy:it.cy+5}));
   L.touched=true;tfSetSel(s.k,its.map((_,t)=>n+t));tfRebuild(s.k);
+  tfBorn(s.k,its.map((_,t)=>n+t));tfFlash('⧉',its.length>1?`Copied ${its.length} pictures here`:'Copied here (moved a little)');
 }
 function tfDelete(){
   const s=TF.sel;if(!s||!LAY[s.k])return;
   const L=LAY[s.k],rm=new Set(s.idx);tfSnap();
   L.items=L.items.filter((_,i)=>!rm.has(i));L.touched=true;TF.sel=null;
   if(!L.items.length)tfDropPage(s.k);else tfRebuild(s.k);
+  tfFlash('🗑',rm.size>1?`Deleted ${rm.size} pictures`:'Picture deleted');
 }
 function tfSelectAll(){
   const b=tfTargetBox(null);if(!b)return;
@@ -1574,7 +1707,7 @@ function tfCenter(){
   let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;
   its.forEach(it=>{x0=Math.min(x0,it.cx-it.w/2);x1=Math.max(x1,it.cx+it.w/2);y0=Math.min(y0,it.cy-it.h/2);y1=Math.max(y1,it.cy+it.h/2)});
   const dx=TFA.aw/2-(x0+x1)/2,dy=TFA.ah/2-(y0+y1)/2;
-  its.forEach(it=>{it.cx+=dx;it.cy+=dy});tfTouch();
+  its.forEach(it=>{it.cx+=dx;it.cy+=dy});tfTouch();tfFlash('⌖','Centered on the page');
 }
 $('#tfDup').onclick=tfDuplicate;$('#tfDel').onclick=tfDelete;$('#tfAll').onclick=tfSelectAll;
 $('#tfRot90').onclick=()=>tfRotate(90);$('#tfCenter').onclick=tfCenter;
@@ -1716,7 +1849,7 @@ document.addEventListener('keydown',e=>{
       if(e.key==='ArrowLeft')it.cx-=d;else if(e.key==='ArrowRight')it.cx+=d;
       else if(e.key==='ArrowUp')it.cy-=d;else if(e.key==='ArrowDown')it.cy+=d;
     });
-    tfTouch();
+    tfTouch(false);
   }
 });
 
