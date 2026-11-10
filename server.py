@@ -378,8 +378,26 @@ def open_file(path):
 
 def register(paths, sort=True):
     """Add files. Files that arrive within 1.5 s of each other (one 'Open with' on
-    many files) are treated as one batch and sorted by name."""
+    many files) are treated as one batch and sorted by name.
+    Opening a file (reading a big PDF) is slow, so it is done BEFORE the file-list lock is taken:
+    the screen keeps updating while files are being added (before, it waited until they were all opened)."""
     added, errors = 0, []
+    opened = {}      # absolute path -> (file id, True if it was opened just now)
+    for p in paths:
+        p = os.path.abspath(p)
+        if p in opened:
+            continue
+        with SLOCK:
+            if any(FILES[i]["path"] == p for i in ORDER if i in FILES):
+                continue
+            known = next((i for i, x in FILES.items() if x["path"] == p), None)   # used earlier by Transform
+        if known:
+            opened[p] = (known, False)
+            continue
+        try:
+            opened[p] = (open_file(p), True)
+        except Exception as e:
+            errors.append(f"{os.path.basename(p)}: {e}")
     with SLOCK:
         if sort:
             now = time.time()
@@ -388,12 +406,12 @@ def register(paths, sort=True):
             BATCH["t"] = now
         for p in paths:
             p = os.path.abspath(p)
-            if any(FILES[i]["path"] == p for i in ORDER if i in FILES):
+            if p not in opened:
                 continue
-            try:   # a picture used earlier by the Transform tool is known already
-                fid = next((i for i, x in FILES.items() if x["path"] == p), None) or open_file(p)
-            except Exception as e:
-                errors.append(f"{os.path.basename(p)}: {e}")
+            fid, new = opened.pop(p)
+            if any(FILES[i]["path"] == p for i in ORDER if i in FILES):
+                if new:
+                    FILES.pop(fid, None)     # the same file was added by another request meanwhile
                 continue
             ORDER.append(fid)
             added += 1
@@ -550,16 +568,15 @@ def register_extra(paths):
     """Pictures dropped / pasted / chosen onto a sheet. The server knows them (so they can be
     drawn and printed) but they are NOT added to the list of pages."""
     out, errors = [], []
-    with SLOCK:
-        for p in paths:
-            p = os.path.abspath(p)
-            fid = next((i for i, x in FILES.items() if x["path"] == p), None)
-            try:
-                if fid is None:
-                    fid = open_file(p)
-                out.append(pub(FILES[fid]))
-            except Exception as e:
-                errors.append(f"{os.path.basename(p)}: {e}")
+    for p in paths:     # opening is slow: done without holding the file-list lock, so the screen keeps updating
+        p = os.path.abspath(p)
+        fid = next((i for i, x in list(FILES.items()) if x["path"] == p), None)
+        try:
+            if fid is None:
+                fid = open_file(p)
+            out.append(pub(FILES[fid]))
+        except Exception as e:
+            errors.append(f"{os.path.basename(p)}: {e}")
     return {"files": out, "errors": errors}
 
 
@@ -1106,24 +1123,61 @@ def send_img(img, hq=False):
     return r
 
 
-def get_area(q):
-    """Paper + printable area from the real driver; falls back to plain paper size."""
+DRV_LOCK = threading.Lock()   # printer driver calls one at a time (many at once can freeze a driver)
+AREA_CACHE = {}               # (printer, paper, colour, duplex, orient) -> (time, area from the driver)
+AREA_TTL = 20.0               # seconds; the preview asks for the same area again for every page
+
+
+def get_area(q, fresh=False):
+    """Paper + printable area from the real driver; falls back to plain paper size.
+    The preview used to ask the printer driver once for EVERY picture it showed, all at the same time:
+    a slow / offline printer then made the whole program hang. Now the answer is remembered for a few seconds,
+    driver calls run one after another, and a stuck driver can no longer block everything.
+    fresh=True (Print, Save PDF) always asks the driver itself, so the result is exactly the same as before."""
     orient = q.get("orient", "portrait")
     pw = float(q.get("w", 210))
     ph = float(q.get("h", 297))
     if (orient == "landscape") != (pw > ph):
         pw, ph = ph, pw
     a = {"pw": pw, "ph": ph, "ox": 0, "oy": 0, "aw": pw, "ah": ph, "driver": False}
+    key = (q.get("printer", ""), q.get("paper"), q.get("color") == "color", q.get("duplex", "off"), orient)
+    hit = AREA_CACHE.get(key)
+    if hit and not fresh and time.time() - hit[0] < AREA_TTL:
+        return dict(hit[1])
+    if not DRV_LOCK.acquire(timeout=60 if fresh else 8):
+        return dict(hit[1]) if hit else a       # driver is busy / stuck: use the last good answer
     try:
-        a = printing.area(q.get("printer", ""), q.get("paper"), q.get("color") == "color",
-                          q.get("duplex", "off"), orient)
-        a["driver"] = True
-    except Exception:
-        pass
+        hit = AREA_CACHE.get(key)               # another request may have just filled it while we waited
+        if hit and not fresh and time.time() - hit[0] < AREA_TTL:
+            return dict(hit[1])
+        try:
+            a = printing.area(key[0], key[1], key[2], key[3], orient)
+            a["driver"] = True
+            AREA_CACHE[key] = (time.time(), dict(a))
+            if len(AREA_CACHE) > 64:
+                AREA_CACHE.pop(next(iter(AREA_CACHE)), None)
+        except Exception:
+            pass
+    finally:
+        DRV_LOCK.release()
     return a
 
 
+# At most a few big pictures are drawn at the same time (each one can be 50-100 MB at high quality).
+# Before, scrolling a long list started dozens of them at once: memory ran out and the program froze.
+RENDER_SEM = threading.BoundedSemaphore(3)
+
+
+def limited(fn):
+    @functools.wraps(fn)
+    def w(*a, **k):
+        with RENDER_SEM:
+            return fn(*a, **k)
+    return w
+
+
 @app.get("/api/thumb")
+@limited
 def thumb():
     f, p = get_page()
     if not f:
@@ -1132,6 +1186,7 @@ def thumb():
 
 
 @app.get("/api/view")
+@limited
 def view():
     """Reader: the page as it looks on its own sheet, with the page number."""
     f, p = get_page()
@@ -1178,6 +1233,7 @@ def pageinfo():
 
 
 @app.get("/api/src")
+@limited
 def src_img():
     """The page as a flat picture (Transform tool draws and moves copies of it)."""
     f, p = get_page()
@@ -1191,6 +1247,7 @@ def src_img():
 
 
 @app.get("/api/preview")
+@limited
 def preview():
     f, p = get_page()
     if not f:
@@ -1239,18 +1296,26 @@ def preview():
 
 @app.get("/api/printers")
 def printers():
+    if not DRV_LOCK.acquire(timeout=20):
+        return jsonify(error="The printer is busy. Try again in a moment."), 503
     try:
         return jsonify(printing.list_printers())
     except Exception as e:
         return jsonify(error=str(e)), 500
+    finally:
+        DRV_LOCK.release()
 
 
 @app.get("/api/printer")
 def printer():
+    if not DRV_LOCK.acquire(timeout=20):
+        return jsonify(error="The printer is busy. Try again in a moment."), 503
     try:
         return jsonify(printing.caps(request.args.get("name", "")))
     except Exception as e:
         return jsonify(error=str(e)), 500
+    finally:
+        DRV_LOCK.release()
 
 
 # ------------------------------------------------------------- profiles
@@ -1373,7 +1438,7 @@ def do_print():
         try:
             area = get_area({"printer": d["printer"], "paper": d.get("paper"),
                              "color": "color" if color else "mono",
-                             "duplex": d.get("duplex", "off"), "orient": orient})
+                             "duplex": d.get("duplex", "off"), "orient": orient}, fresh=True)
             area_mm = area["aw"]
             if sheets:
                 grid = nup_grid(nup, area["aw"], area["ah"], nup_asp(*sheets[0][0]))
@@ -1566,7 +1631,7 @@ def save_pdf():
     def run():
         tmp = None
         try:
-            a = get_area(area_q)
+            a = get_area(area_q, fresh=True)
             dpi_now = save_dpi_for(pages, a)
             sc = dpi_now / 25.4                               # pixels per mm
             W, H = max(1, round(a["pw"] * sc)), max(1, round(a["ph"] * sc))
