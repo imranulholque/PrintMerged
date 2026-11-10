@@ -40,7 +40,8 @@ SAVE PDF  (step 2, top right: "Save PDF" and the folder button)
  - First click asks for a folder once; after that it saves straight into that folder. The folder button changes the folder,
    opens it, and lets you type a file name (empty = automatic, "<first file> merged <date time>"). An existing file is never
    overwritten: a " (2)" is added. The folder is kept in %APPDATA%\PCPrint\save.json. Only the PC window can use it.
- - Quality: 200 dpi pictures inside the PDF (text stays sharp, files stay small).
+ - Quality: pages are drawn at 300 dpi at least (up to 600 dpi when a picture has more detail). Flat pages (text,
+   drawings) are stored lossless, photos as JPEG quality 98 with full colour detail. Files are bigger than before.
 
 TRANSFORM:  Shift + drag = the picture(s) move dead straight (sideways, up / down or exactly diagonal). Works for moving and for
    Alt + drag copying. While Shift is held the picture stays on its page.
@@ -51,3 +52,10 @@ WINDOW SIZE / FEEDBACK
  (open them with the buttons: they open on top of the page), the Transform strip wraps instead of cutting buttons off.
  While you drag / copy / resize in Transform, a small read-out follows the mouse (Move / Copy / Resize with the numbers), the picture lifts,
  the page it will land on says 'Move to page N', and rotate / center / copy / paste / delete / undo show a short confirmation.
+
+
+SHARP / FAST  (small coloured button in the top bar, next to the zoom buttons)
+ - Sharp (default): the screen shows pictures and PDFs in full original quality (JPEG 95, full colour detail, more pixels).
+ - Fast: lighter pictures on screen, quicker to open and scroll. Use it for a big file list, then switch back.
+ - It changes the DISPLAY only. Print, Save PDF and your original files are never touched by it. The choice is remembered.
+ - Printing now draws each page at the printer's resolution, up to 600 dpi (was 300).

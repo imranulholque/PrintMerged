@@ -12,6 +12,8 @@ PHYSICALWIDTH, PHYSICALHEIGHT, PHYSICALOFFSETX, PHYSICALOFFSETY = 110, 111, 112,
 DM_OUT_BUFFER, DM_IN_PROMPT, DM_IN_BUFFER = 2, 4, 8
 IDOK = 1
 
+PRINT_MAX_DPI = 600.0   # render the page at the printer's resolution, up to this (was 300)
+
 # Public DEVMODE fields we save in a profile (driver private data is saved separately)
 PROFILE_FIELDS = ["Orientation", "PaperSize", "PaperLength", "PaperWidth", "Scale",
                   "Copies", "DefaultSource", "PrintQuality", "Color", "Duplex",
@@ -308,7 +310,8 @@ def print_job(name, paper, color, duplex, orient, copies, n, provider, progress,
     try:
         W, H = hdc.GetDeviceCaps(HORZRES), hdc.GetDeviceCaps(VERTRES)
         dpi = hdc.GetDeviceCaps(LOGPIXELSX) or 300
-        f = min(1.0, 300.0 / dpi)
+        # high quality: up to 600 dpi (was 300); the picture stays under compose()'s 8000 px safety size
+        f = min(1.0, PRINT_MAX_DPI / dpi, 7900.0 / max(W, H))
         rw, rh = max(1, int(W * f)), max(1, int(H * f))
         hdc.StartDoc(title)
         for j, i in enumerate(seq):

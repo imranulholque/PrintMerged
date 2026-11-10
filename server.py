@@ -1089,9 +1089,17 @@ def get_page():
     return f, p
 
 
-def send_img(img):
+def want_hq():
+    """Display only: the screen asks for the sharp (original quality) picture. Print and Save PDF never use this."""
+    return request.args.get("hq") == "1"
+
+
+def send_img(img, hq=False):
     b = io.BytesIO()
-    img.save(b, "JPEG", quality=85)
+    if hq:
+        img.save(b, "JPEG", quality=95, subsampling=0)   # sharp: near lossless, full colour detail
+    else:
+        img.save(b, "JPEG", quality=85)                    # fast: small and quick
     b.seek(0)
     r = send_file(b, mimetype="image/jpeg")
     r.headers["Cache-Control"] = "no-store"
@@ -1140,7 +1148,7 @@ def view():
     else:  # an image is shown on an A4 sheet
         wmm, hmm = (297.0, 210.0) if f["lands"][0] else (210.0, 297.0)
     try:
-        zq = max(1.0, min(3.0, float(request.args.get("q", 1))))   # sharper picture when zoomed in
+        zq = max(1.0, min(5.0 if want_hq() else 3.0, float(request.args.get("q", 1))))   # sharper picture when zoomed in
     except Exception:
         zq = 1.0
     W = int((1000 if wmm > hmm else 800) * zq)
@@ -1148,7 +1156,7 @@ def view():
     H = max(100, int(hmm * ppmm))
     num = numspec(request.args, f["id"], p)
     img = sheet(f, p, W, H, False, "fit", ppmm, 100.0, num, rotate=False)
-    return send_img(img)
+    return send_img(img, want_hq())
 
 
 @app.get("/api/area")
@@ -1179,7 +1187,7 @@ def src_img():
         px = max(200, min(3000, int(float(request.args.get("px", 1600)))))
     except Exception:
         px = 1600
-    return send_img(load_source(f, p, px, False))
+    return send_img(load_source(f, p, px, False), want_hq())
 
 
 @app.get("/api/preview")
@@ -1192,7 +1200,7 @@ def preview():
     if mode not in SCALES:
         mode = "fit"
     try:
-        W = int(max(480.0, min(1800.0, float(request.args.get("pw", 720)))))   # sharper when zoomed in
+        W = int(max(480.0, min(3600.0 if want_hq() else 1800.0, float(request.args.get("pw", 720)))))   # sharper when zoomed in
     except Exception:
         W = 720
     s = W / a["pw"]  # pixels per mm on the preview sheet
@@ -1226,7 +1234,7 @@ def preview():
         d.line((x1, y, x1, min(y + 6, y2)), fill=blue, width=2)
         d.line((x2, y, x2, min(y + 6, y2)), fill=blue, width=2)
     d.rectangle((0, 0, W - 1, H - 1), outline=(120, 124, 132), width=2)
-    return send_img(img)
+    return send_img(img, want_hq())
 
 
 @app.get("/api/printers")
@@ -1389,7 +1397,46 @@ def do_print():
 
 # ------------------------------------------------- save the merged result as a PDF
 SAVE_FILE = os.path.join(CFG_DIR, "save.json")   # kept apart from settings.json: phones may read that one
-SAVE_DPI = 200.0
+SAVE_DPI = 300.0       # lowest quality used for Save PDF (was 200); pictures with more detail get up to SAVE_MAX_DPI
+SAVE_MAX_DPI = 600.0
+
+
+def save_dpi_for(pages, a):
+    """Pixels per inch for Save PDF: at least SAVE_DPI, more when a picture on the list has more detail
+    than that on this paper (so nothing of the original is thrown away), never above SAVE_MAX_DPI."""
+    best = SAVE_DPI
+    try:
+        long_in = max(a["pw"], a["ph"]) / 25.4
+        for f, _p, _vk in pages:
+            if f.get("kind") == "pdf":
+                continue
+            try:
+                with Image.open(f["path"]) as im:
+                    best = max(best, max(im.size) / long_in)
+            except Exception:
+                pass
+        # compose() keeps pictures under 8000 px: stay below that on big paper (A3 and up)
+        best = min(best, SAVE_MAX_DPI, 7900.0 / long_in)
+    except Exception:
+        best = SAVE_DPI
+    return max(72.0, best)
+
+
+def encode_save_page(paper):
+    """One finished sheet -> bytes for the PDF, with no visible loss:
+    flat pages (text, drawings: up to 65536 colours) are stored lossless (PNG),
+    photos as JPEG quality 98 with full colour detail."""
+    b = io.BytesIO()
+    flat = False
+    try:
+        flat = paper.getcolors(maxcolors=65536) is not None
+    except Exception:
+        flat = False
+    if flat:
+        paper.save(b, "PNG", optimize=False, compress_level=6)
+    else:
+        paper.save(b, "JPEG", quality=98, subsampling=0, optimize=True)
+    return b.getvalue()
 
 
 def save_cfg():
@@ -1520,7 +1567,8 @@ def save_pdf():
         tmp = None
         try:
             a = get_area(area_q)
-            sc = SAVE_DPI / 25.4                              # pixels per mm
+            dpi_now = save_dpi_for(pages, a)
+            sc = dpi_now / 25.4                               # pixels per mm
             W, H = max(1, round(a["pw"] * sc)), max(1, round(a["ph"] * sc))
             ox, oy = round(a["ox"] * sc), round(a["oy"] * sc)
             AW, AH = max(1, min(W - ox, round(a["aw"] * sc))), max(1, min(H - oy, round(a["ah"] * sc)))
@@ -1538,12 +1586,11 @@ def save_pdf():
                         pg = sheet(f, p, AW, AH, not color, mode, sc, pct, num, items=page_items(i))
                     paper = Image.new(pg.mode, (W, H), 255 if pg.mode == "L" else (255, 255, 255))
                     paper.paste(pg, (ox, oy))
-                    b = io.BytesIO()
-                    paper.save(b, "JPEG", quality=90, optimize=True, dpi=(SAVE_DPI, SAVE_DPI))
+                    data = encode_save_page(paper)
                     del pg, paper
                     with LOCK:
                         page = doc.new_page(width=pt_w, height=pt_h)
-                        page.insert_image(page.rect, stream=b.getvalue())
+                        page.insert_image(page.rect, stream=data)
                     JOBS[jid].update(done=i + 1)
                 path = unique_path(folder, base)
                 tmp = path + ".part"
