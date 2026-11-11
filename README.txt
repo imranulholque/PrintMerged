@@ -47,6 +47,17 @@ TRANSFORM:  Shift + drag = the picture(s) move dead straight (sideways, up / dow
    Alt + drag copying. While Shift is held the picture stays on its page.
 
 
+PERSPECTIVE CROP  (Transform > "✂ Perspective crop", or press C with one picture selected)
+ - Like Photoshop's Perspective Crop: a window opens with the whole picture and 4 corner handles. Pull each corner onto a corner of the
+   area you want (a skewed photo of a paper, a sign, a screen...). The edge handles move a whole edge, dragging inside moves the shape.
+   Magnets: the page border and the straight line of the next corner (hold Alt to switch the magnets off). While a corner moves, a
+   magnifier shows it 3x. The arrow keys move the chosen corner (Shift = 10 px). Enter = apply, Esc = cancel.
+ - Lossless: the area is cut from the ORIGINAL file, not from the screen copy. A straight (rectangle) crop copies the pixels exactly,
+   nothing is resampled. A slanted crop is straightened once (bicubic) into a picture as big as its longest sides, so no side is
+   made smaller. PDF pages are drawn again at the needed size (up to 1200 dpi), so text stays sharp. Print and Save PDF use the same.
+ - After Apply the picture fits inside the box it had before (same centre); then move / resize / rotate / copy it as usual.
+   Open the tool again to change the corners, or press "Remove crop" to get the whole picture back. Undo / redo (Ctrl+Z / Ctrl+Y) work.
+
 WINDOW SIZE / FEEDBACK
  The window can be any size (min 480 x 400): the top bar shortens its labels, the side panels slide away below 1100 px
  (open them with the buttons: they open on top of the page), the Transform strip wraps instead of cutting buttons off.

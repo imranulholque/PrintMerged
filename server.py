@@ -1042,6 +1042,135 @@ def load_source(f, idx, want_w, mono):
     return img.convert("L") if mono else img
 
 
+# ---- perspective crop (Transform): cut a 4-corner area out of the ORIGINAL and straighten it ----
+CROP_EPS = 1.0                    # pixels: a quad this close to a plain rectangle is cut as a rectangle (nothing resampled)
+CROP_MAX_PIXELS = 100_000_000     # safety cap for the straightened picture
+
+
+def parse_quad(raw):
+    """8 numbers (x, y of the corners TL, TR, BR, BL, each 0..1 of the whole page) -> ((x, y) * 4), or None
+    when it is missing, bad, has no area, or is not a proper convex four-sided shape."""
+    try:
+        vals = [float(x) for x in (raw.split(",") if isinstance(raw, str) else raw)]
+    except Exception:
+        return None
+    if len(vals) != 8 or not all(math.isfinite(x) for x in vals):
+        return None
+    vals = [min(1.0, max(0.0, x)) for x in vals]
+    q = [(vals[i], vals[i + 1]) for i in range(0, 8, 2)]
+    for i in range(4):   # every turn the same way (clockwise on screen) = convex, no twisted corners
+        ax, ay = q[i]
+        bx, by = q[(i + 1) % 4]
+        cx, cy = q[(i + 2) % 4]
+        if (bx - ax) * (cy - by) - (by - ay) * (cx - bx) <= 1e-7:
+            return None
+    return tuple(q)
+
+
+def _solve8(A, B):
+    """Solve an 8x8 linear system (Gauss, partial pivoting)."""
+    n = 8
+    M = [list(map(float, A[i])) + [float(B[i])] for i in range(n)]
+    for c in range(n):
+        piv = max(range(c, n), key=lambda r: abs(M[r][c]))
+        if abs(M[piv][c]) < 1e-12:
+            raise ValueError("degenerate crop")
+        M[c], M[piv] = M[piv], M[c]
+        for r in range(c + 1, n):
+            f = M[r][c] / M[c][c]
+            if f:
+                for k in range(c, n + 1):
+                    M[r][k] -= f * M[c][k]
+    x = [0.0] * n
+    for r in range(n - 1, -1, -1):
+        x[r] = (M[r][n] - sum(M[r][k] * x[k] for k in range(r + 1, n))) / M[r][r]
+    return x
+
+
+def _persp_coeffs(dst, src):
+    """Pillow PERSPECTIVE coefficients: for every pixel (x, y) of the output rectangle `dst`, where to read in the
+    source quad `src`."""
+    A, B = [], []
+    for (x, y), (X, Y) in zip(dst, src):
+        A.append([x, y, 1, 0, 0, 0, -X * x, -X * y])
+        B.append(X)
+        A.append([0, 0, 0, x, y, 1, -Y * x, -Y * y])
+        B.append(Y)
+    return _solve8(A, B)
+
+
+def _is_rect(Q, eps):
+    TL, TR, BR, BL = Q
+    return (abs(TL[0] - BL[0]) <= eps and abs(TR[0] - BR[0]) <= eps
+            and abs(TL[1] - TR[1]) <= eps and abs(BL[1] - BR[1]) <= eps)
+
+
+def _straighten(img, Q):
+    """Q = the 4 corners (TL, TR, BR, BL) in pixel coordinates of img -> that area as an upright rectangle.
+    A rectangle is cut exactly (every pixel copied, nothing resampled). A slanted area is straightened with one
+    perspective transform, bicubic, into a picture as big as its longest sides (so no side is made smaller)."""
+    W, H = img.size
+    if _is_rect(Q, CROP_EPS):
+        x0 = round((Q[0][0] + Q[3][0]) / 2)
+        x1 = round((Q[1][0] + Q[2][0]) / 2)
+        y0 = round((Q[0][1] + Q[1][1]) / 2)
+        y1 = round((Q[3][1] + Q[2][1]) / 2)
+        x0 = max(0, min(W - 1, x0))
+        y0 = max(0, min(H - 1, y0))
+        x1 = max(x0 + 1, min(W, x1))
+        y1 = max(y0 + 1, min(H, y1))
+        return img.crop((x0, y0, x1, y1))
+    Q = [(min(W - 0.5, max(0.5, x)), min(H - 0.5, max(0.5, y))) for x, y in Q]   # never read outside the picture
+    d = lambda a, b: math.hypot(a[0] - b[0], a[1] - b[1])
+    TL, TR, BR, BL = Q
+    ow, oh = max(d(TL, TR), d(BL, BR)), max(d(TL, BL), d(TR, BR))
+    if ow * oh > CROP_MAX_PIXELS:
+        k = math.sqrt(CROP_MAX_PIXELS / (ow * oh))
+        ow, oh = ow * k, oh * k
+    ow, oh = max(1, round(ow)), max(1, round(oh))
+    coeffs = _persp_coeffs([(0, 0), (ow, 0), (ow, oh), (0, oh)], Q)
+    return img.transform((ow, oh), Image.Transform.PERSPECTIVE, coeffs, Image.Resampling.BICUBIC)
+
+
+def crop_source(f, idx, quad, want_w=None):
+    """The quad (see parse_quad) of a page, straightened. Pictures are cut from the full original (never from a
+    reduced copy). PDF pages are drawn again at the size that is needed (at least 72 dpi, up to 1200 dpi), so text
+    and drawings stay sharp. want_w = how many pixels wide the result will be used (PDF only)."""
+    if f["kind"] == "pdf":
+        with LOCK:
+            doc = fitz.open(f["path"])
+            try:
+                pg = doc[idx]
+                pw, ph = pg.rect.width, pg.rect.height
+                P = [(x * pw, y * ph) for x, y in quad]
+                dd = lambda a, b: math.hypot(a[0] - b[0], a[1] - b[1])
+                ew = max(dd(P[0], P[1]), dd(P[3], P[2]), 1.0)
+                bx0, bx1 = min(p[0] for p in P), max(p[0] for p in P)
+                by0, by1 = min(p[1] for p in P), max(p[1] for p in P)
+                s = float(want_w or 2400) / ew
+                if not _is_rect(P, 1.0 / max(s, 0.01)):
+                    s *= 1.5                                  # slanted: draw bigger, the result is reduced after
+                s = max(1.0, min(s, 1200.0 / 72.0, 9000.0 / max(bx1 - bx0, by1 - by0, 1.0)))
+                clip = fitz.Rect(bx0 - 2, by0 - 2, bx1 + 2, by1 + 2) & pg.rect
+                pix = pg.get_pixmap(matrix=fitz.Matrix(s, s), clip=clip, colorspace=fitz.csRGB, alpha=False)
+                img = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
+                Q = [(x * s - pix.x, y * s - pix.y) for x, y in P]
+            finally:
+                doc.close()
+    else:
+        img = load_source(f, idx, 1e9, False)   # the picture at its real size, never reduced
+        Q = [(x * img.width, y * img.height) for x, y in quad]
+    return _straighten(img, Q)
+
+
+def item_source(f, idx, want_w, mono, crop=None):
+    """What one picture on a Transform sheet is made from: the page, or its perspective crop."""
+    if not crop:
+        return load_source(f, idx, want_w, mono)
+    img = crop_source(f, idx, crop, want_w)
+    return img.convert("L") if mono else img
+
+
 def clean_items(raw, own=None):
     """Pictures placed on a sheet: centre (cx, cy) and size (w, h) in mm from the printable
     area's top-left corner, rotation in degrees (clockwise), and which file/page to draw
@@ -1064,6 +1193,7 @@ def clean_items(raw, own=None):
         v["w"] = max(1.0, min(3000.0, v["w"]))
         v["h"] = max(1.0, min(3000.0, v["h"]))
         v["file"], v["pg"] = fobj, pg
+        v["crop"] = parse_quad(it.get("crop")) if it.get("crop") else None   # perspective crop (None = whole page)
         out.append(v)
     return out
 
@@ -1074,11 +1204,11 @@ def compose_items(W, H, mono, ppmm, items):
     canvas = Image.new("L" if mono else "RGB", (W, H), 255 if mono else (255, 255, 255))
     need = {}
     for it in items:
-        k = (it["file"]["id"], it["pg"])
-        need[k] = [it["file"], it["pg"], max(need.get(k, [0, 0, 0])[2], it["w"] * ppmm)]
-    srcs = {k: load_source(v[0], v[1], v[2], mono) for k, v in need.items()}
+        k = (it["file"]["id"], it["pg"], it.get("crop"))
+        need[k] = [it["file"], it["pg"], max(need.get(k, [0, 0, 0, None])[2], it["w"] * ppmm), it.get("crop")]
+    srcs = {k: item_source(v[0], v[1], v[2], mono, v[3]) for k, v in need.items()}
     for it in items:
-        src = srcs[(it["file"]["id"], it["pg"])]
+        src = srcs[(it["file"]["id"], it["pg"], it.get("crop"))]
         tw, th = max(1, round(it["w"] * ppmm)), max(1, round(it["h"] * ppmm))
         if tw * th > 60_000_000:
             continue
@@ -1243,6 +1373,15 @@ def src_img():
         px = max(200, min(3000, int(float(request.args.get("px", 1600)))))
     except Exception:
         px = 1600
+    quad = parse_quad(request.args.get("crop")) if request.args.get("crop") else None
+    if quad:   # perspective crop: cut from the original, straightened, then only reduced to the screen size
+        try:
+            img = crop_source(f, p, quad, px)
+        except Exception as e:
+            return jsonify(error=str(e)), 500
+        if img.width > px:
+            img = img.resize((px, max(1, round(img.height * px / img.width))), Image.LANCZOS)
+        return send_img(img, want_hq())
     return send_img(load_source(f, p, px, False), want_hq())
 
 
