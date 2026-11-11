@@ -253,6 +253,19 @@ body.tfbusy{user-select:none;-webkit-user-select:none}
 #tfflash{position:fixed;left:50%;top:64px;z-index:55;transform:translate(-50%,-8px);opacity:0;pointer-events:none;display:flex;align-items:center;gap:8px;background:rgba(17,20,26,.94);color:#fff;border-radius:22px;padding:7px 16px 7px 9px;font-weight:600;font-size:13px;box-shadow:0 6px 20px rgba(0,0,0,.4);transition:opacity .18s ease,transform .18s ease;max-width:92vw}
 #tfflash.on{opacity:1;transform:translate(-50%,0)}
 #tfflash i{font-style:normal;width:24px;height:24px;border-radius:50%;background:var(--pri);display:flex;align-items:center;justify-content:center;font-size:14px;flex:none}
+/* perspective crop editor */
+#pcmodal{position:fixed;inset:0;background:rgba(0,0,0,.74);z-index:45;display:flex;align-items:center;justify-content:center}
+#pcmodal[hidden]{display:none}
+.pccard{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;max-width:97vw;max-height:97vh;box-shadow:0 12px 40px rgba(0,0,0,.55)}
+.pchd{display:flex;flex-direction:column;gap:2px}
+.pchd b{font-size:14px}
+.pcstage{display:flex;align-items:center;justify-content:center;min-height:100px;background:var(--bg);border-radius:8px;overflow:hidden}
+.pcwrap{position:relative;display:inline-block;line-height:0;touch-action:none;user-select:none;-webkit-user-select:none}
+.pcwrap img{display:block;max-width:calc(97vw - 70px);max-height:calc(97vh - 205px);pointer-events:none}
+.pcwrap svg{position:absolute;left:0;top:0;overflow:visible}
+.pcloupe{position:absolute;width:132px;height:132px;border-radius:50%;border:3px solid #fff;box-shadow:0 4px 18px rgba(0,0,0,.6);pointer-events:none;display:none;background-color:#000;z-index:3}
+.pcbtns{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+#pcinfo{min-height:16px}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
 </style>
 </head>
@@ -408,6 +421,7 @@ body.tfbusy{user-select:none;-webkit-user-select:none}
         <button id="tfAll" class="tbtn" title="Select every picture on this page (Ctrl+A)">☑<span class="t"> All</span></button>
         <button id="tfDup" class="tbtn" title="Duplicate the selected pictures on this page (Ctrl+D, or hold Alt and drag). Ctrl+C / Ctrl+X / Ctrl+V copy, cut and paste between pages.">⧉<span class="t"> Copy</span></button>
         <button id="tfRot90" class="tbtn" title="Rotate 90° clockwise (R, Shift+R = back)">⟳<span class="t"> Rotate 90°</span> <kbd>R</kbd></button>
+        <button id="tfCrop" class="tbtn" title="Perspective crop: pull the 4 corners onto the area you want (like Photoshop) and it is cut out straight. Cut from the original, so no quality is lost. (C)">✂<span class="t"> Perspective crop</span> <kbd>C</kbd></button>
         <button id="tfCenter" class="tbtn hideS" title="Center on the page">⌖<span class="t"> Center</span></button>
         <button id="tfDel" class="tbtn dng" title="Delete the selected pictures (Delete key)">🗑</button>
         <span class="tfright">
@@ -444,6 +458,7 @@ body.tfbusy{user-select:none;-webkit-user-select:none}
         <div><b>Alt + drag</b><span>copy (all selected together)</span></div>
         <div><b>Shift + drag</b><span>move / copy dead straight (sideways, up / down, diagonal)</span></div>
         <div><b>Corner handles</b><span>resize · Shift = free shape</span></div>
+        <div><b>C / ✂ button</b><span>perspective crop of the selected picture (pull 4 corners, lossless)</span></div>
         <div><b>R / Shift + R</b><span>rotate 90° clockwise / back</span></div>
         <div><b>R, nothing selected</b><span>mouse on a page = that page · mouse elsewhere = all pages</span></div>
         <div><b>Arrow keys</b><span>nudge 1 mm · Shift = 10 mm</span></div>
@@ -519,6 +534,21 @@ body.tfbusy{user-select:none;-webkit-user-select:none}
 
 <div id="drop" hidden><div>⬇ Drop files here<br><span class="mut">PDF or images</span></div></div>
 <div id="toast" hidden></div>
+<div id="pcmodal" hidden>
+  <div class="pccard">
+    <div class="pchd"><b>✂ Perspective crop</b>
+      <span class="mut">Pull the 4 corners (or the edges) onto the area you want. It is cut out and straightened. Nothing is made smaller or blurred: it is cut from the original picture.</span></div>
+    <div class="pcstage"><div class="pcwrap" id="pcwrap"><img id="pcimg" alt="" draggable="false"><svg id="pcsvg" xmlns="http://www.w3.org/2000/svg"></svg><div class="pcloupe" id="pcloupe"></div></div></div>
+    <div class="mut" id="pcinfo"></div>
+    <div class="pcbtns">
+      <button id="pcReset" title="Put the corners back around the whole picture">↺ Reset corners</button>
+      <button id="pcRemove" title="Go back to the whole, uncropped picture">Remove crop</button>
+      <span class="grow mut">Alt = no snapping · arrow keys move the chosen corner · Enter = apply · Esc = cancel</span>
+      <button id="pcCancel">Cancel</button>
+      <button id="pcOk" class="p">Apply crop</button>
+    </div>
+  </div>
+</div>
 <div id="updmodal" hidden>
   <div class="card">
     <h3>PC Print update</h3>
@@ -1266,7 +1296,7 @@ function buildJob(s){
     for(const p of sh){
       const L=LAY[kk(p)];
       if(!L){toast('The layout is still loading. Try again in a moment.');return null}
-      lay[kk(p)]=L.items.map(i=>({cx:i.cx,cy:i.cy,w:i.w,h:i.h,rot:i.rot,f:i.f,p:i.p}));
+      lay[kk(p)]=L.items.map(i=>({cx:i.cx,cy:i.cy,w:i.w,h:i.h,rot:i.rot,f:i.f,p:i.p,crop:i.crop||null}));
     }
     body.layout=lay;
   }
@@ -1433,7 +1463,7 @@ function tfBuild(box){
   const L=LAY[box._k],mono=$('#color').value!=='color';
   box._clip.innerHTML='';box._vis=[];
   L.items.forEach(it=>{
-    const im=el('img',{className:'tfi',alt:'',draggable:false,src:`/api/src?f=${it.f}&p=${it.p}&px=${HQ?3000:1600}&hq=${HQ?1:0}&v=${REV}`});
+    const im=el('img',{className:'tfi',alt:'',draggable:false,src:`/api/src?f=${it.f}&p=${it.p}&px=${HQ?3000:1600}&hq=${HQ?1:0}&v=${REV}`+(it.crop?'&crop='+it.crop.map(v=>+(+v).toFixed(6)).join(','):'')});
     if(mono)im.style.filter='grayscale(1)';
     place(im,it);box._clip.append(im);box._vis.push(im);
   });
@@ -1604,7 +1634,7 @@ function tfDropPage(k){   // a page with no pictures left goes away
 }
 function tfCopy(){
   const its=tfItems();if(!its.length)return false;
-  TFCLIP={k:TF.sel.k,n:0,items:its.map(({cx,cy,w,h,rot,f,p})=>({cx,cy,w,h,rot,f,p}))};
+  TFCLIP={k:TF.sel.k,n:0,items:its.map(({cx,cy,w,h,rot,f,p,crop})=>({cx,cy,w,h,rot,f,p,crop}))};
   tfFlash('⧉',`Copied ${its.length} picture${its.length>1?'s':''} - press Ctrl+V on any page`);return true;
 }
 function tfCut(){if(tfCopy())tfDelete()}
@@ -1656,6 +1686,7 @@ function tfSync(){
   if(TF.sel&&!has)TF.sel=null;
   ['tfDup','tfRot90','tfCenter','tfDel'].forEach(id=>$('#'+id).disabled=!has);
   $('#tfAll').disabled=!document.querySelector('.tfbox');
+  $('#tfCrop').disabled=its.length!==1;
   $('#tfhint').hidden=has;$('#tfflds').hidden=!has;
   document.querySelectorAll('#tfSeg button').forEach(b=>b.classList.toggle('on',b.dataset.u===TF.unit));
   $('#tfLockB').classList.toggle('on',TF.lock);$('#tfLockB').textContent=TF.lock?'🔒':'🔓';
@@ -1744,6 +1775,176 @@ $('#pvstage').addEventListener('pointerdown',e=>{
   if(TF.on&&!e.target.closest('.tfbox')&&!e.ctrlKey&&TF.sel){TF.sel=null;tfSelChanged()}
 });
 
+
+/* ---------------- Transform: perspective crop (pull 4 corners like Photoshop, the area is cut out straight) ----------------
+   The picture keeps the 4 corners as numbers (0..1 of the whole page: TL, TR, BR, BL). The server cuts the area out of the
+   ORIGINAL file (a plain rectangle is copied pixel for pixel, a slanted one is straightened at full size), so nothing is lost. */
+const PC={open:false,k:null,i:-1,f:null,p:null,q:null,url:'',sel:-1,w:0,h:0,had:false};
+function pcNat(q,inf){   // size (mm) of the straightened area when the page is inf.w x inf.h mm
+  const P=[0,1,2,3].map(i=>[q[2*i]*inf.w,q[2*i+1]*inf.h]),d=(a,b)=>Math.hypot(a[0]-b[0],a[1]-b[1]);
+  return [Math.max(d(P[0],P[1]),d(P[3],P[2])),Math.max(d(P[0],P[3]),d(P[1],P[2]))];
+}
+const tfNat=(it,inf)=>it.crop?pcNat(it.crop,inf):[inf.w,inf.h];
+async function tfInfoOf(f,p){
+  const k=key(f,p);
+  if(!INFO[k]){try{const j=await (await api(`/api/pageinfo?f=${f}&p=${p}`)).json();if(j.w)INFO[k]=j}catch{}}
+  return INFO[k]||null;
+}
+const pcFull=()=>[0,0,1,0,1,1,0,1];
+const pcIsFull=q=>q.every((v,i)=>Math.abs(v-pcFull()[i])<1e-4);
+function pcValid(q){   // convex, clockwise, not tiny
+  const w=PC.w,h=PC.h,P=[0,1,2,3].map(i=>[q[2*i]*w,q[2*i+1]*h]);
+  for(let i=0;i<4;i++){
+    const a=P[i],b=P[(i+1)%4],c=P[(i+2)%4];
+    if(Math.hypot(b[0]-a[0],b[1]-a[1])<12)return false;
+    if((b[0]-a[0])*(c[1]-b[1])-(b[1]-a[1])*(c[0]-b[0])<=1)return false;
+  }
+  return true;
+}
+async function tfCropOpen(){
+  if(PC.open)return;
+  const its=tfItems(),s=TF.sel;
+  if(!s||its.length!==1)return toast('Click one picture first, then press Perspective crop.');
+  const k=s.k,i=s.idx[0],it=its[0],f=it.f,p=it.p,had=!!it.crop,q0=it.crop?it.crop.map(Number):null;
+  const inf=await tfInfoOf(f,p);if(!inf)return toast('Could not read this picture.');
+  Object.assign(PC,{open:true,k,i,f,p,q:q0||[.03,.03,.97,.03,.97,.97,.03,.97],sel:-1,had,url:''});
+  $('#pcRemove').hidden=!had;$('#pcinfo').textContent='Loading the picture…';
+  $('#pcmodal').hidden=false;
+  try{   // the WHOLE page (not the old crop), big and sharp, so the corners can be placed exactly
+    const r=await api(`/api/src?f=${f}&p=${p}&px=2400&hq=1&v=${REV}`);
+    if(!r.ok)throw 0;
+    PC.url=URL.createObjectURL(await r.blob());
+  }catch{pcClose();return toast('Could not load the picture.')}
+  const img=$('#pcimg');img.onload=pcLayout;img.src=PC.url;
+}
+function pcClose(){
+  PC.open=false;$('#pcmodal').hidden=true;$('#pcloupe').style.display='none';
+  const img=$('#pcimg');img.onload=null;img.removeAttribute('src');
+  if(PC.url){URL.revokeObjectURL(PC.url);PC.url=''}
+}
+function pcLayout(){
+  if(!PC.open)return;
+  const img=$('#pcimg'),svg=$('#pcsvg');
+  PC.w=img.clientWidth;PC.h=img.clientHeight;
+  if(!PC.w||!PC.h)return;
+  svg.setAttribute('width',PC.w);svg.setAttribute('height',PC.h);svg.setAttribute('viewBox',`0 0 ${PC.w} ${PC.h}`);
+  if(!pcValid(PC.q))PC.q=[.03,.03,.97,.03,.97,.97,.03,.97];
+  pcDraw();
+}
+window.addEventListener('resize',()=>{if(PC.open)pcLayout()});
+function pcDraw(){
+  const q=PC.q,w=PC.w,h=PC.h,P=[0,1,2,3].map(i=>[q[2*i]*w,q[2*i+1]*h]);
+  const f=n=>+n.toFixed(1),pt=p=>f(p[0])+','+f(p[1]);
+  const lerp=(a,b,t)=>[a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t];
+  let o=`<path d="M0 0H${w}V${h}H0Z M${pt(P[0])}L${pt(P[1])}L${pt(P[2])}L${pt(P[3])}Z" fill="rgba(0,0,0,.52)" fill-rule="evenodd" fill-opacity="1" style="pointer-events:none"/>`;
+  for(const t of [1/3,2/3]){   // thirds grid: helps to see that lines come out straight
+    const a=lerp(P[0],P[1],t),b=lerp(P[3],P[2],t),c=lerp(P[0],P[3],t),d=lerp(P[1],P[2],t);
+    o+=`<path d="M${pt(a)}L${pt(b)}M${pt(c)}L${pt(d)}" stroke="rgba(255,255,255,.55)" stroke-width="1" fill="none" style="pointer-events:none"/>`;
+  }
+  const poly=P.map(pt).join(' ');
+  o+=`<polygon points="${poly}" fill="rgba(255,255,255,.001)" stroke="#fff" stroke-width="3.5" data-h="b" style="cursor:move"/>`;
+  o+=`<polygon points="${poly}" fill="none" stroke="#2563eb" stroke-width="1.8" style="pointer-events:none"/>`;
+  for(let i=0;i<4;i++){   // edge handles
+    const m=lerp(P[i],P[(i+1)%4],.5);
+    o+=`<g data-h="e${i}" style="cursor:move"><circle cx="${f(m[0])}" cy="${f(m[1])}" r="13" fill="rgba(255,255,255,.001)"/><rect x="${f(m[0]-5)}" y="${f(m[1]-5)}" width="10" height="10" rx="2" fill="#fff" stroke="#2563eb" stroke-width="2"/></g>`;
+  }
+  const cur=['nwse-resize','nesw-resize','nwse-resize','nesw-resize'];
+  for(let i=0;i<4;i++){   // corner handles
+    o+=`<g data-h="c${i}" style="cursor:${cur[i]}"><circle cx="${f(P[i][0])}" cy="${f(P[i][1])}" r="16" fill="rgba(255,255,255,.001)"/><circle cx="${f(P[i][0])}" cy="${f(P[i][1])}" r="7.5" fill="${PC.sel===i?'#2563eb':'#fff'}" stroke="#2563eb" stroke-width="2.5"/></g>`;
+  }
+  $('#pcsvg').innerHTML=o;
+  pcInfo();
+}
+async function pcInfo(){
+  const inf=INFO[key(PC.f,PC.p)];if(!inf)return;
+  const [w,h]=pcNat(PC.q,inf),un=TF.unit,u=UN[un];
+  $('#pcinfo').textContent=`Result: ${+(w/u).toFixed(un==='mm'?0:un==='cm'?1:2)} × ${+(h/u).toFixed(un==='mm'?0:un==='cm'?1:2)} ${un} at the picture's real size`;
+}
+function pcLoupe(i,show){   // magnifier next to the corner that is being moved
+  const L=$('#pcloupe');
+  if(!show||!PC.url){L.style.display='none';return}
+  const Z=3,cx=PC.q[2*i]*PC.w,cy=PC.q[2*i+1]*PC.h,R=66;
+  const onLeft=cx<PC.w/2;
+  L.style.left=(onLeft?PC.w-132-12:12)+'px';L.style.top='12px';
+  L.style.backgroundImage=`linear-gradient(#ff3b30,#ff3b30),linear-gradient(#ff3b30,#ff3b30),url(${PC.url})`;
+  L.style.backgroundSize=`1px 100%,100% 1px,${PC.w*Z}px ${PC.h*Z}px`;
+  L.style.backgroundPosition=`center,center,${R-cx*Z}px ${R-cy*Z}px`;
+  L.style.backgroundRepeat='no-repeat';
+  L.style.display='block';
+}
+const pcClamp=(v,a,b)=>Math.min(b,Math.max(a,v));
+$('#pcsvg').addEventListener('pointerdown',e=>{
+  const t=e.target.closest&&e.target.closest('[data-h]');if(!t||e.button!==0)return;
+  e.preventDefault();
+  const h=t.dataset.h,x0=e.clientX,y0=e.clientY,q0=[...PC.q],W=PC.w,H=PC.h,SNAP=7;
+  const ci=h[0]==='c'?+h[1]:-1;
+  PC.sel=ci;pcDraw();if(ci>=0)pcLoupe(ci,true);
+  const move=ev=>{
+    const dxp=ev.clientX-x0,dyp=ev.clientY-y0;
+    let q=[...q0];
+    if(h[0]==='c'){
+      let x=q0[2*ci]*W+dxp,y=q0[2*ci+1]*H+dyp;
+      x=pcClamp(x,0,W);y=pcClamp(y,0,H);
+      if(!ev.altKey){   // magnets: the page border, and the straight line of the next corner (keeps a straight crop straight)
+        const px=[3,2,1,0][ci],py=[1,0,3,2][ci];   // corner that shares the x / the y
+        const tx=[0,W,q0[2*px]*W],ty=[0,H,q0[2*py+1]*H];
+        for(const v of tx)if(Math.abs(x-v)<SNAP){x=v;break}
+        for(const v of ty)if(Math.abs(y-v)<SNAP){y=v;break}
+      }
+      q[2*ci]=x/W;q[2*ci+1]=y/H;
+    }else if(h[0]==='e'){   // an edge moves sideways to itself (its direction stays)
+      const i=+h[1],j=(i+1)%4,ax=q0[2*i]*W,ay=q0[2*i+1]*H,bx=q0[2*j]*W,by=q0[2*j+1]*H;
+      const L=Math.hypot(bx-ax,by-ay)||1,nx=-(by-ay)/L,ny=(bx-ax)/L,tt=dxp*nx+dyp*ny;
+      let mx=nx*tt,my=ny*tt,f=1;
+      for(const [c,d,M] of [[ax,mx,W],[bx,mx,W],[ay,my,H],[by,my,H]]){
+        if(c+d<0&&d)f=Math.min(f,-c/d);else if(c+d>M&&d)f=Math.min(f,(M-c)/d);
+      }
+      mx*=f;my*=f;
+      q[2*i]=(ax+mx)/W;q[2*i+1]=(ay+my)/H;q[2*j]=(bx+mx)/W;q[2*j+1]=(by+my)/H;
+    }else{   // the whole shape moves
+      const xs=[0,1,2,3].map(i=>q0[2*i]*W),ys=[0,1,2,3].map(i=>q0[2*i+1]*H);
+      const mx=pcClamp(dxp,-Math.min(...xs),W-Math.max(...xs)),my=pcClamp(dyp,-Math.min(...ys),H-Math.max(...ys));
+      for(let i=0;i<4;i++){q[2*i]=(xs[i]+mx)/W;q[2*i+1]=(ys[i]+my)/H}
+    }
+    if(pcValid(q)){PC.q=q;pcDraw();if(ci>=0)pcLoupe(ci,true)}
+  };
+  const up=()=>{window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',up);window.removeEventListener('pointercancel',up);pcLoupe(0,false)};
+  window.addEventListener('pointermove',move);window.addEventListener('pointerup',up);window.addEventListener('pointercancel',up);
+});
+async function pcApply(remove){
+  const L=LAY[PC.k],it=L&&L.items[PC.i];
+  if(!it||it.f!==PC.f||it.p!==PC.p){pcClose();return toast('That picture is not there any more.')}
+  const inf=INFO[key(it.f,it.p)];if(!inf){pcClose();return}
+  const full=remove||pcIsFull(PC.q);
+  if(full&&!it.crop){pcClose();return}
+  tfSnap();
+  const [nw,nh]=full?[inf.w,inf.h]:pcNat(PC.q,inf);
+  const s=Math.min(it.w/nw,it.h/nh);                 // the new shape fits inside the box the picture had, same centre
+  if(full)delete it.crop;else it.crop=PC.q.map(v=>+v.toFixed(6));
+  it.w=nw*s;it.h=nh*s;L.touched=true;
+  const k=PC.k;pcClose();tfRebuild(k);
+  tfFlash('✂',full?'Crop removed':'Perspective crop applied');
+}
+$('#pcOk').onclick=()=>pcApply(false);
+$('#pcRemove').onclick=()=>pcApply(true);
+$('#pcCancel').onclick=pcClose;
+$('#pcReset').onclick=()=>{PC.q=[.03,.03,.97,.03,.97,.97,.03,.97];PC.sel=-1;pcDraw()};
+$('#pcmodal').addEventListener('pointerdown',e=>{if(e.target===$('#pcmodal'))PC.sel=-1});
+$('#tfCrop').onclick=tfCropOpen;
+document.addEventListener('keydown',e=>{
+  if(!PC.open)return;
+  if(e.key==='Escape'){e.preventDefault();e.stopPropagation();pcClose();return}
+  if(e.key==='Enter'){e.preventDefault();e.stopPropagation();pcApply(false);return}
+  if(PC.sel>=0&&e.key.startsWith('Arrow')){
+    e.preventDefault();e.stopPropagation();
+    const d=e.shiftKey?10:1,q=[...PC.q],i=PC.sel;
+    if(e.key==='ArrowLeft')q[2*i]-=d/PC.w;else if(e.key==='ArrowRight')q[2*i]+=d/PC.w;
+    else if(e.key==='ArrowUp')q[2*i+1]-=d/PC.h;else q[2*i+1]+=d/PC.h;
+    q[2*i]=pcClamp(q[2*i],0,1);q[2*i+1]=pcClamp(q[2*i+1],0,1);
+    if(pcValid(q)){PC.q=q;pcDraw();pcLoupe(i,true);clearTimeout(PC._lt);PC._lt=setTimeout(()=>pcLoupe(0,false),900)}
+  }
+},true);
+
 /* ---- R key in the preview works even when Transform is off: turns the page under the mouse ---- */
 /* R with the pointer ON a page turns only that page. R with the pointer anywhere else (side panel, top bar, gaps,
    outside the window) turns ALL pages together. The pointer position is read at the moment R is pressed, so
@@ -1757,12 +1958,13 @@ function hoverSheetIdx(){   // index of the page under the pointer, or -1 when t
   return sh?[...document.querySelectorAll('#pvstage .pvsheet')].indexOf(sh):-1;
 }
 function fitItem(it,inf,a){   // default size of a picture for the current Scaling mode, at its current rotation
-  const m=$('#scale').value,odd=Math.round(it.rot/90)%2!==0,iw=odd?inf.h:inf.w,ih=odd?inf.w:inf.h;let s;
+  const [nw,nh]=tfNat(it,inf);
+  const m=$('#scale').value,odd=Math.round(it.rot/90)%2!==0,iw=odd?nh:nw,ih=odd?nw:nh;let s;
   if(m==='actual')s=1;
   else if(m==='custom')s=setPct($('#pct').value)/100;
   else if(m==='fill')s=Math.max(a.aw/iw,a.ah/ih);
   else s=Math.min(a.aw/iw,a.ah/ih);
-  return {...it,w:inf.w*s,h:inf.h*s,cx:a.aw/2,cy:a.ah/2};
+  return {...it,w:nw*s,h:nh*s,cx:a.aw/2,cy:a.ah/2};
 }
 async function pageRotate(deg){
   if(STEP!==2)return;
@@ -1799,7 +2001,7 @@ async function pageRotate(deg){
 }
 
 document.addEventListener('keydown',e=>{   // Transform off: R / Shift+R turns the page under the mouse
-  if(TF.on||STEP!==2)return;
+  if(TF.on||STEP!==2||PC.open)return;
   const t=e.target;if(t&&/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)&&t.type!=='checkbox')return;
   if(e.key.toLowerCase()==='r'&&!e.ctrlKey&&!e.altKey&&!e.metaKey){e.preventDefault();pageRotate(e.shiftKey?-90:90)}
 });
@@ -1850,7 +2052,7 @@ $('#tfAdd').onclick=()=>tfFromServer('/api/xpick');
 $('#tfPaste').onclick=tfPaste;
 
 document.addEventListener('keydown',e=>{
-  if(!TF.on||STEP!==2)return;
+  if(!TF.on||STEP!==2||PC.open)return;
   const t=e.target;if(t&&/^(INPUT|SELECT|TEXTAREA)$/.test(t.tagName))return;
   const k=e.key.toLowerCase();
   if(e.ctrlKey&&k==='a'){e.preventDefault();tfSelectAll();return}
@@ -1863,6 +2065,7 @@ document.addEventListener('keydown',e=>{
   if(k==='delete'||k==='backspace'){e.preventDefault();tfDelete()}
   else if(e.ctrlKey&&k==='d'){e.preventDefault();tfDuplicate()}
   else if(!e.ctrlKey&&!e.altKey&&k==='r'){e.preventDefault();tfRotate(e.shiftKey?-90:90)}
+  else if(!e.ctrlKey&&!e.altKey&&!e.metaKey&&k==='c'){e.preventDefault();tfCropOpen()}
   else if(!e.ctrlKey&&e.key.startsWith('Arrow')){
     e.preventDefault();tfSnap('arrow');const d=e.shiftKey?10:1,its=tfItems();
     its.forEach(it=>{
